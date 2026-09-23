@@ -3,6 +3,7 @@ import { HttpError, read, write, locked } from "../../../../../server/store";
 import { handler, body, reviewSchema } from "../../../../../server/validation";
 import { buildReadingGuide } from "../../../../../core/teacher/reading-guide";
 import type { Assignment, Submission } from "../../../../../core/model";
+import { textOf } from "../../../../../core/evidence/replay";
 export const runtime = "nodejs";
 export async function POST(
   req: Request,
@@ -39,7 +40,24 @@ export async function POST(
           400,
           "설정된 최소 대목을 읽고 확인해주세요. 대목이 적으면 전체 글을 읽어주세요.",
         );
-      current.review = { ...review, passages, updatedAt: Date.now() };
+      if (review.completed) {
+        const feedback = review.feedback;
+        if (!feedback?.quote || !feedback.strength || !feedback.nextStep)
+          throw new HttpError(
+            400,
+            "글의 대목, 잘된 점과 이유, 다음에 해볼 수정 한 가지를 남겨주세요.",
+          );
+        if (!textOf(current.doc).includes(feedback.quote))
+          throw new HttpError(
+            400,
+            "피드백의 대목은 제출된 본문에서 그대로 가져와주세요.",
+          );
+      }
+      current.review = {
+        ...review,
+        passages,
+        updatedAt: Math.max(Date.now(), current.review.updatedAt + 1),
+      };
       await write("submissions", id, current);
       return { review: current.review };
     });

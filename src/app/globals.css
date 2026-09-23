@@ -2011,3 +2011,74 @@ fieldset .check-label {
     transition: none !important;
   }
 }
+
+/* Keep learning goals and specific feedback visible before process metrics. */
+.learning-focus {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green, #276055);
+  border-radius: 10px;
+  background: #f3f6f1;
+  padding: 18px;
+  margin-bottom: 20px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.learning-focus h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.learning-focus p,
+.learning-focus li {
+  font-size: 13px;
+  line-height: 1.75;
+}
+.learning-focus ul {
+  padding-left: 20px;
+  margin: 10px 0;
+}
+.learning-focus small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.assignment-instructions {
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.learning-feedback h3,
+.learning-response h4 {
+  margin: 24px 0 10px;
+}
+.learning-feedback form {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 4px;
+}
+.learning-feedback blockquote,
+.learning-response blockquote {
+  margin: 16px 0;
+  padding: 12px 18px;
+  border-left: 3px solid #276055;
+  background: #f3f6f1;
+}
+.learning-feedback p,
+.learning-response p {
+  line-height: 1.8;
+}
+.human-check textarea {
+  font-size: 13px;
+  line-height: 1.65;
+}
+.process-details > summary {
+  font-size: 13px;
+  padding: 14px 0;
+}
+.process-details .score-card {
+  margin-top: 14px;
+}
+.learning-feedback,
+.learning-response,
+.human-check {
+  overflow-wrap: anywhere;
+}

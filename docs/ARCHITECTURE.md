@@ -33,3 +33,11 @@ Local recovery does not cache the whole application for offline launch. If the p
 ## Evidence limits
 
 Client-originated events cannot establish identity, honest event reporting, or tamper resistance. Sequence/replay validation only establishes internal consistency against earlier server records. Character counts are UTF-16 code units; they are not grapheme counts. Estimated activity sums edit gaps <=60s within the same foreground session; it is not measured attention. Browser exit/session-end events are best effort; a resumed session is explicit even if a previous crash omitted session_end.
+
+## Feedback and follow-up learning
+
+Assignments optionally include a learning goal and up to four content criteria. Old records without these fields remain readable. The roster omits numeric scores; the review opens on full text with process scores inside a closed disclosure.
+
+Teacher review completion requires the reading acknowledgement, a quote present in the final document, a specific strength and a next revision. An optional question and reaction accompany the feedback. Incomplete reviews are stripped from student GET responses. Updating a completed review as a draft hides it until it is sent again.
+
+The student-only `POST /api/submissions/[id]/learning-response` accepts a short rewritten excerpt and an explanation/question after published feedback. It uses the review timestamp and response version for optimistic conflict detection, with idempotent identical retries. The latest response is stored separately without altering the submitted document, events, synchronization revision or process score. Stale responses are labelled as answers to earlier feedback. These short responses are explicitly saved by a button and are not IndexedDB writing drafts. Teacher feedback and student follow-up become part of the existing per-submission JSON export and retention scope.

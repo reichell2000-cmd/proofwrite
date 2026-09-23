@@ -3,6 +3,11 @@ import { HttpError } from "./store";
 export const assignmentSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().max(6000),
+  learningGoal: z.string().trim().max(600).default(""),
+  successCriteria: z
+    .array(z.string().trim().min(1).max(250))
+    .max(4)
+    .default([]),
   policy: z.enum(["SOLO", "RESEARCH", "COACH", "COLLAB"]),
   minRead: z.number().int().min(1).max(10),
   fullRead: z.boolean(),
@@ -90,6 +95,22 @@ export const syncSchema = z
     submit: z.boolean(),
   })
   .strict();
+export const feedbackSchema = z
+  .object({
+    quote: z.string().trim().max(1500),
+    strength: z.string().trim().max(2000),
+    question: z.string().trim().max(1000),
+    nextStep: z.string().trim().max(2000),
+  })
+  .strict();
+export const learningResponseSchema = z
+  .object({
+    reviewUpdatedAt: z.number().int().positive(),
+    baseVersion: z.number().int().nonnegative(),
+    revisedExcerpt: z.string().trim().max(3000),
+    explanation: z.string().trim().min(1).max(2000),
+  })
+  .strict();
 export const reviewSchema = z
   .object({
     passages: z.array(z.string().max(80)).max(30),
@@ -102,6 +123,7 @@ export const reviewSchema = z
       "수업에서 함께 이야기합시다",
     ]),
     completed: z.boolean(),
+    feedback: feedbackSchema.optional(),
   })
   .strict();
 export async function body(req: Request) {

@@ -131,8 +131,8 @@ export default function Home() {
               <span className="step-no">03</span>
               <h3>다시 이어지는 대화</h3>
               <p>
-                과정증거를 참고하고, 글을 직접 읽고, 학생에게 짧은 반응을
-                전합니다.
+                글의 구체적인 대목에 피드백을 전하고, 학생이 다시 써본 생각을
+                함께 읽습니다.
               </p>
             </article>
           </div>

@@ -57,8 +57,8 @@ export function buildReadingGuide(
     items.push({
       id: `revision-${major.seq}`,
       reason: "major_revision",
-      title: "↗ 생각을 고쳐 쓴 대목",
-      detail: `${major.deletedChars ?? 0}자 삭제, ${major.insertedChars ?? 0}자 입력. 수정 시점의 문장입니다.`,
+      title: "↗ 문자를 많이 수정한 시점",
+      detail: `${major.deletedChars ?? 0}자 삭제, ${major.insertedChars ?? 0}자 입력. 수정 시점의 문장입니다. 생각이 깊어졌는지는 내용과 학생의 설명을 읽고 판단해주세요.`,
       excerpt: excerpt(major),
       eventSeq: major.seq,
     });
@@ -90,5 +90,12 @@ export function buildReadingGuide(
     });
     if (items.length >= 5) break;
   }
-  return items;
+  // Repeated excerpts are one reading opportunity, not several acknowledgements.
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.excerpt.replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

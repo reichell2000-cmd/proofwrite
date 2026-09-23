@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Feather } from "lucide-react";
 import { Header, Notice } from "./Shell";
+import { LearningFocus } from "./LearningFocus";
 import { api } from "../core/api";
 import { type Assignment, POLICIES } from "../core/model";
 export default function Join({
@@ -27,6 +28,7 @@ export default function Join({
         <p className="overline">YOUR NEXT THOUGHT</p>
         <h1>{assignment.title}</h1>
         <p className="pre-wrap muted">{assignment.description}</p>
+        <LearningFocus assignment={assignment} />
         <div className="policy">
           <b>{assignment.policy}</b>
           <span>{POLICIES[assignment.policy]}</span>

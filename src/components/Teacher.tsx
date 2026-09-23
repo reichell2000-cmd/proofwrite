@@ -16,6 +16,7 @@ import {
   Download,
 } from "lucide-react";
 import { Header, Notice, time } from "./Shell";
+import { LearningFocus } from "./LearningFocus";
 import { RichDocument } from "./RichDocument";
 import { Replay } from "./Replay";
 import { api, ApiError } from "../core/api";
@@ -26,8 +27,9 @@ import {
   type Policy,
   POLICIES,
   REFLECTIONS,
+  EMPTY_FEEDBACK,
+  type TeacherFeedback,
 } from "../core/model";
-import { type ProofScoreBreakdown } from "../core/proof/score";
 import { submissionScore } from "../core/proof/submission-score";
 import { summarizeEvidence } from "../core/evidence/summarize";
 import { externalTransformation } from "../core/evidence/replay";
@@ -39,7 +41,6 @@ type Row = {
   status: string;
   updatedAt: number;
   review: Review;
-  score: ProofScoreBreakdown;
   hasPick: boolean;
 };
 export default function Teacher() {
@@ -56,6 +57,8 @@ export default function Teacher() {
   const [filter, setFilter] = useState("all");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [learningGoal, setLearningGoal] = useState("");
+  const [criteria, setCriteria] = useState("");
   const [policy, setPolicy] = useState<Policy>("COACH");
   const [minRead, setMinRead] = useState("2");
   const [questions, setQuestions] = useState<string[]>([REFLECTIONS[3]]);
@@ -218,9 +221,9 @@ export default function Teacher() {
           <div className="sidebar-note">
             <BookOpen size={21} />
             <p>
-              숫자 다음에는,
+              학생의 글에서,
               <br />
-              언제나 학생의 글.
+              다음 배움으로.
             </p>
             <small>
               Proof는 과정증거의 충분성을
@@ -353,7 +356,7 @@ export default function Teacher() {
                         <tr>
                           <th>학생 · 글 제목</th>
                           <th>작성 상태</th>
-                          <th>과정증거</th>
+                          <th>피드백</th>
                           <th>읽기 안내</th>
                           <th>교사 확인</th>
                         </tr>
@@ -386,17 +389,13 @@ export default function Teacher() {
                               <small>{time(r.updatedAt)}</small>
                             </td>
                             <td>
-                              {r.status === "submitted" ? (
-                                <>
-                                  <strong className="score-inline">
-                                    {r.score.total}
-                                    <small>/100</small>
-                                  </strong>
-                                  <small>{r.score.label}</small>
-                                </>
-                              ) : (
-                                <span className="muted">기록 중</span>
-                              )}
+                              <span className="muted">
+                                {r.review.completed
+                                  ? "피드백 전달됨"
+                                  : r.status === "submitted"
+                                    ? "피드백 기다림"
+                                    : "작성 중"}
+                              </span>
                             </td>
                             <td>
                               {r.hasPick ? (
@@ -447,8 +446,8 @@ export default function Teacher() {
                   </div>
                   <p className="fine-print">
                     Proof는 기록된 과정증거의 충분성을 요약한 시범 지표입니다.
-                    본인 작성·AI 사용·부정행위 확률이 아닙니다. 낮은 점수는 글과
-                    과정을 함께 확인할 출발점입니다.
+                    글의 수준이나 노력·성실성·본인 작성 여부를 평가하지
+                    않습니다. 먼저 글을 읽고, 필요할 때 작성과정을 살펴보세요.
                   </p>
                 </>
               ) : (
@@ -480,6 +479,11 @@ export default function Teacher() {
                   {
                     title,
                     description,
+                    learningGoal,
+                    successCriteria: criteria
+                      .split("\n")
+                      .map((x) => x.trim())
+                      .filter(Boolean),
                     policy,
                     minRead: minRead === "full" ? 2 : Number(minRead),
                     fullRead: minRead === "full",
@@ -494,6 +498,8 @@ export default function Teacher() {
                 setCreating(false);
                 setTitle("");
                 setDescription("");
+                setLearningGoal("");
+                setCriteria("");
                 setCustom("");
               } catch (e) {
                 setError((e as Error).message);
@@ -524,6 +530,33 @@ export default function Teacher() {
                 placeholder="무엇을 쓰고, 어떤 생각을 나누면 좋을까요?"
               />
             </label>
+            <label>
+              이번 글의 배움 목표 <small>(선택)</small>
+              <textarea
+                rows={2}
+                maxLength={600}
+                value={learningGoal}
+                onChange={(e) => setLearningGoal(e.target.value)}
+                placeholder="예: 친구에게 용기에 대한 내 생각을 구체적인 경험으로 설명하기"
+              />
+            </label>
+            <label>
+              내용을 함께 살펴볼 기준{" "}
+              <small>(선택 · 한 줄에 하나, 최대 4개)</small>
+              <textarea
+                rows={3}
+                maxLength={1003}
+                value={criteria}
+                onChange={(e) => setCriteria(e.target.value)}
+                placeholder={
+                  "내 생각이 드러나는가\n그 생각을 뒷받침하는 구체적인 경험이 있는가\n경험과 생각의 연결을 독자가 이해할 수 있는가"
+                }
+              />
+            </label>
+            <p className="fine-print">
+              학년과 글의 종류에 맞게 적어주세요. 분량·속도·수정 횟수보다 글에서
+              배울 내용을 기준으로 삼아주세요.
+            </p>
             <div className="form-grid">
               <label>
                 AI 사용정책
@@ -616,7 +649,7 @@ function ReviewPanel({
 }) {
   const [s, setS] = useState<Submission | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("guide");
+  const [tab, setTab] = useState("full");
   const [target, setTarget] = useState<number | undefined>();
   const [review, setReview] = useState<Review | null>(null);
   const [saving, setSaving] = useState(false);
@@ -658,6 +691,20 @@ function ReviewPanel({
       </>
     );
   const { summary, score, guide, pastes } = derived;
+  const feedback = review.feedback || EMPTY_FEEDBACK;
+  const feedbackReady = !!(
+    feedback.quote.trim() &&
+    feedback.strength.trim() &&
+    feedback.nextStep.trim()
+  );
+  const updateFeedback = (field: keyof TeacherFeedback, value: string) => {
+    setSaved(false);
+    setReview({
+      ...review,
+      completed: false,
+      feedback: { ...feedback, [field]: value },
+    });
+  };
   const fulfilled =
     review.fullRead ||
     (!assignment.fullRead && review.passages.length >= assignment.minRead);
@@ -677,6 +724,7 @@ function ReviewPanel({
           passages: review.passages,
           fullRead: review.fullRead,
           reaction: review.reaction,
+          feedback,
           completed,
         },
       );
@@ -735,10 +783,17 @@ function ReviewPanel({
       </div>
       <div className="review-layout">
         <section className="review-main">
+          <LearningFocus assignment={assignment} />
+          {assignment.description && (
+            <details className="assignment-instructions">
+              <summary>과제 안내 다시 보기</summary>
+              <p className="pre-wrap">{assignment.description}</p>
+            </details>
+          )}
           <nav className="tabs" aria-label="학생 글 검토">
             {[
-              { key: "guide", text: "읽기 안내", Icon: Star },
               { key: "full", text: "전체 글", Icon: FileText },
+              { key: "guide", text: "읽기 안내", Icon: Star },
               { key: "replay", text: "작성과정", Icon: History },
             ].map(({ key, text, Icon }) => (
               <button
@@ -779,6 +834,15 @@ function ReviewPanel({
                     <div className="student-why">학생의 말 · {s.pick.why}</div>
                   )}
                   <div className="reading-actions">
+                    {item.reason === "student_pick" && (
+                      <button
+                        className="subtle"
+                        disabled={s.status !== "submitted"}
+                        onClick={() => updateFeedback("quote", item.excerpt)}
+                      >
+                        이 대목에 피드백 쓰기
+                      </button>
+                    )}
                     {item.eventSeq && (
                       <button
                         className="subtle"
@@ -829,7 +893,25 @@ function ReviewPanel({
           {tab === "full" && (
             <section className="panel">
               <h2>{s.title}</h2>
+              <p className="fine-print">
+                무슨 생각을 전하려는지, 근거가 그 생각을 어떻게 뒷받침하는지
+                읽어주세요. 과정 기록만으로 글의 수준을 판단하지 않습니다.
+              </p>
               <RichDocument doc={s.doc} />
+              {s.pick && (
+                <div className="student-why">
+                  <b>학생이 보여주고 싶은 대목</b>
+                  <blockquote>{s.pick.text}</blockquote>
+                  {s.pick.why && <p>{s.pick.why}</p>}
+                  <button
+                    className="subtle"
+                    disabled={s.status !== "submitted"}
+                    onClick={() => updateFeedback("quote", s.pick!.text)}
+                  >
+                    이 대목에 피드백 쓰기
+                  </button>
+                </div>
+              )}
               {s.sources && (
                 <div className="sources">
                   <h3>참고자료 · 출처</h3>
@@ -903,104 +985,35 @@ function ReviewPanel({
               </section>
             </>
           )}
+          {s.learningResponse && (
+            <section className="panel learning-response">
+              <h3>학생의 다음 시도</h3>
+              <p className="muted">
+                {s.learningResponse.reviewUpdatedAt === s.review.updatedAt
+                  ? "현재 피드백에 대한 답"
+                  : "이전 피드백에 대한 답"}{" "}
+                · {time(s.learningResponse.updatedAt)}
+              </p>
+              {s.learningResponse.revisedExcerpt && (
+                <>
+                  <h4>다시 써본 대목</h4>
+                  <blockquote className="pre-wrap">
+                    {s.learningResponse.revisedExcerpt}
+                  </blockquote>
+                </>
+              )}
+              <h4>학생이 설명한 선택·질문</h4>
+              <p className="pre-wrap">{s.learningResponse.explanation}</p>
+              <small>
+                제출 원문과 별도로 보관한 후속 연습입니다. 과정 점수에 반영하지
+                않습니다.
+              </small>
+            </section>
+          )}
         </section>
         <aside className="review-aside">
-          <section className="score-card">
-            <p className="overline">PROCESS EVIDENCE · PILOT</p>
-            <div className="score-large">
-              {score.total}
-              <span>/ 100</span>
-            </div>
-            <h3>{score.label}</h3>
-            <p>
-              현재 기록에 남은 작성과정
-              <br />
-              증거의 충분성입니다.
-            </p>
-            <div className="score-breakdown">
-              {[
-                ["생각의 흔적", score.thoughtTrace, 30],
-                ["My Proof · 연구 시범", score.myProof, 25],
-                ["입력 기록", score.inputEvidence, 20],
-                ["수정 과정", score.revisionEvidence, 15],
-                ["과정의 연결", score.processContinuity, 10],
-              ].map(([label, value, max]) => (
-                <div key={String(label)}>
-                  <span>{label}</span>
-                  <b>{value === null ? "해당 없음" : `${value}/${max}`}</b>
-                </div>
-              ))}
-            </div>
-            {score.myProof === null && (
-              <small>
-                리듬 미수집·표본 부족: 나머지 75점 만점을 100점으로
-                환산했습니다. 미참여로 감점하지 않습니다.
-              </small>
-            )}
-            <details>
-              <summary>점수의 의미와 확인할 사실</summary>
-              <p>{score.caveat}</p>
-              <ul>
-                <li>문서 버전 {summary.snapshotCount}개</li>
-                <li>수정 기록 {summary.revisionCount}회</li>
-                <li>외부 텍스트 삽입 {summary.pasteChars}자</li>
-                <li>활동 구간 추정 {minutes(summary.activeMs)}</li>
-              </ul>
-              <p>
-                적은 수정·짧은 글은 낮게 표시될 수 있습니다. 키보드 변경·입력
-                장치·한글 입력에 따라 리듬 신호가 달라질 수 있습니다.
-              </p>
-            </details>
-          </section>
-          <section className="panel compact">
-            <h3>관찰된 기록</h3>
-            <dl className="facts">
-              {[
-                ["전체 경과", minutes(summary.totalElapsedMs)],
-                ["활동 구간 추정", minutes(summary.activeMs)],
-                ["기록 간격·비활동", minutes(summary.inactiveMs)],
-                ["작성 세션", `${summary.sessionCount}회`],
-                [
-                  "입력 / 삭제",
-                  `${summary.insertedChars} / ${summary.deletedChars}자`,
-                ],
-                [
-                  "관찰된 직접입력 비율",
-                  summary.observedDirectInputRatio === null
-                    ? "자료 없음"
-                    : `${Math.round(summary.observedDirectInputRatio * 100)}%`,
-                ],
-                [
-                  "붙여넣기 / 최대",
-                  `${summary.pasteCount}회 / ${summary.largestPasteChars}자`,
-                ],
-                [
-                  "실행 취소 / 다시 실행",
-                  `${summary.undoCount} / ${summary.redoCount}회`,
-                ],
-                [
-                  "창 이탈",
-                  `${summary.focusExitCount}회 · ${minutes(summary.focusAwayMs || 0)}`,
-                ],
-                [
-                  "표 / 이미지 / 링크",
-                  `${summary.tableChangeCount} / ${summary.imageCount} / ${summary.linkCount}회`,
-                ],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
-            <small>
-              직접입력은 입력 이벤트 출처에 따른 관찰값입니다. 창 이탈과
-              붙여넣기는 부정행위 근거가 아닙니다. 활동시간은 실제 집중시간이
-              아닙니다.
-            </small>
-          </section>
           <section className="panel compact human-check">
-            <h3>선생님의 읽기 확인</h3>
+            <h3>읽은 대목에 피드백 남기기</h3>
             <p>
               {assignment.fullRead
                 ? "전체 글 읽기"
@@ -1013,6 +1026,53 @@ function ReviewPanel({
             <p className="fine-print">
               대목이 적으면 ‘전체 글’에서 읽기 확인을 할 수 있습니다.
             </p>
+            <p className="fine-print">
+              이 학생의 표현을 짚고, 다음 시도 한 가지만 제안해주세요.
+            </p>
+            <label>
+              함께 볼 대목
+              <textarea
+                rows={3}
+                maxLength={1500}
+                value={feedback.quote}
+                disabled={saving || s.status !== "submitted"}
+                onChange={(e) => updateFeedback("quote", e.target.value)}
+                placeholder="제출된 본문에서 문장이나 대목을 그대로 옮겨주세요."
+              />
+            </label>
+            <label>
+              잘된 점과 그 이유
+              <textarea
+                rows={3}
+                maxLength={2000}
+                value={feedback.strength}
+                disabled={saving || s.status !== "submitted"}
+                onChange={(e) => updateFeedback("strength", e.target.value)}
+                placeholder="어떤 표현이 무엇을 이해하는 데 도움이 되었나요?"
+              />
+            </label>
+            <label>
+              생각을 넓히는 질문 <small>(선택)</small>
+              <textarea
+                rows={2}
+                maxLength={1000}
+                value={feedback.question}
+                disabled={saving || s.status !== "submitted"}
+                onChange={(e) => updateFeedback("question", e.target.value)}
+                placeholder="학생이 자기 생각으로 답할 수 있는 질문 한 가지"
+              />
+            </label>
+            <label>
+              다음에 해볼 수정 한 가지
+              <textarea
+                rows={3}
+                maxLength={2000}
+                value={feedback.nextStep}
+                disabled={saving || s.status !== "submitted"}
+                onChange={(e) => updateFeedback("nextStep", e.target.value)}
+                placeholder="어느 대목에 어떤 내용을 더하거나 바꿔보면 좋을까요?"
+              />
+            </label>
             <label>
               짧은 반응
               <select
@@ -1020,7 +1080,11 @@ function ReviewPanel({
                 disabled={s.status !== "submitted"}
                 onChange={(e) => {
                   setSaved(false);
-                  setReview({ ...review, reaction: e.target.value });
+                  setReview({
+                    ...review,
+                    completed: false,
+                    reaction: e.target.value,
+                  });
                 }}
               >
                 <option value="">반응 선택 (선택사항)</option>
@@ -1035,14 +1099,25 @@ function ReviewPanel({
               </select>
             </label>
             {error && <Notice error>{error}</Notice>}
-            {saved && <Notice>읽기 확인을 저장했습니다.</Notice>}
+            {saved && (
+              <Notice>
+                {review.completed
+                  ? "피드백을 학생에게 전했습니다."
+                  : "중간 저장했습니다. 학생에게는 아직 보이지 않습니다."}
+              </Notice>
+            )}
             <button
               className="primary wide"
-              disabled={!fulfilled || saving || s.status !== "submitted"}
+              disabled={
+                !fulfilled ||
+                !feedbackReady ||
+                saving ||
+                s.status !== "submitted"
+              }
               onClick={() => void save(true)}
             >
               <Check size={16} />
-              {saving ? "저장 중…" : "읽기 완료"}
+              {saving ? "저장 중…" : "피드백 전달"}
             </button>
             <button
               className="subtle wide"
@@ -1052,6 +1127,108 @@ function ReviewPanel({
               중간 저장
             </button>
           </section>
+          <details className="process-details">
+            <summary>작성과정 보조 지표 펼치기</summary>
+            <p className="fine-print">
+              검증 전 시범 지표입니다. 글의 질·노력·성적과 연결하지 마세요.
+              메모·음성 입력·보조기기·오프라인 사고는 충분히 기록되지 않을 수
+              있습니다.
+            </p>
+            <section className="score-card">
+              <p className="overline">PROCESS EVIDENCE · PILOT</p>
+              <div className="score-large">
+                {score.total}
+                <span>/ 100</span>
+              </div>
+              <h3>{score.label}</h3>
+              <p>
+                현재 기록에 남은 작성과정
+                <br />
+                증거의 충분성입니다.
+              </p>
+              <div className="score-breakdown">
+                {[
+                  ["생각의 흔적", score.thoughtTrace, 30],
+                  ["My Proof · 연구 시범", score.myProof, 25],
+                  ["입력 기록", score.inputEvidence, 20],
+                  ["수정 과정", score.revisionEvidence, 15],
+                  ["과정의 연결", score.processContinuity, 10],
+                ].map(([label, value, max]) => (
+                  <div key={String(label)}>
+                    <span>{label}</span>
+                    <b>{value === null ? "해당 없음" : `${value}/${max}`}</b>
+                  </div>
+                ))}
+              </div>
+              {score.myProof === null && (
+                <small>
+                  리듬 미수집·표본 부족: 나머지 75점 만점을 100점으로
+                  환산했습니다. 미참여로 감점하지 않습니다.
+                </small>
+              )}
+              <details>
+                <summary>점수의 의미와 확인할 사실</summary>
+                <p>{score.caveat}</p>
+                <ul>
+                  <li>문서 버전 {summary.snapshotCount}개</li>
+                  <li>수정 기록 {summary.revisionCount}회</li>
+                  <li>외부 텍스트 삽입 {summary.pasteChars}자</li>
+                  <li>활동 구간 추정 {minutes(summary.activeMs)}</li>
+                </ul>
+                <p>
+                  적은 수정·짧은 글은 낮게 표시될 수 있습니다. 키보드 변경·입력
+                  장치·한글 입력에 따라 리듬 신호가 달라질 수 있습니다.
+                </p>
+              </details>
+            </section>
+            <section className="panel compact">
+              <h3>관찰된 기록</h3>
+              <dl className="facts">
+                {[
+                  ["전체 경과", minutes(summary.totalElapsedMs)],
+                  ["활동 구간 추정", minutes(summary.activeMs)],
+                  ["기록 간격·비활동", minutes(summary.inactiveMs)],
+                  ["작성 세션", `${summary.sessionCount}회`],
+                  [
+                    "입력 / 삭제",
+                    `${summary.insertedChars} / ${summary.deletedChars}자`,
+                  ],
+                  [
+                    "관찰된 직접입력 비율",
+                    summary.observedDirectInputRatio === null
+                      ? "자료 없음"
+                      : `${Math.round(summary.observedDirectInputRatio * 100)}%`,
+                  ],
+                  [
+                    "붙여넣기 / 최대",
+                    `${summary.pasteCount}회 / ${summary.largestPasteChars}자`,
+                  ],
+                  [
+                    "실행 취소 / 다시 실행",
+                    `${summary.undoCount} / ${summary.redoCount}회`,
+                  ],
+                  [
+                    "창 이탈",
+                    `${summary.focusExitCount}회 · ${minutes(summary.focusAwayMs || 0)}`,
+                  ],
+                  [
+                    "표 / 이미지 / 링크",
+                    `${summary.tableChangeCount} / ${summary.imageCount} / ${summary.linkCount}회`,
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <small>
+                직접입력은 입력 이벤트 출처에 따른 관찰값입니다. 창 이탈과
+                붙여넣기는 부정행위 근거가 아닙니다. 활동시간은 실제 집중시간이
+                아닙니다.
+              </small>
+            </section>
+          </details>
         </aside>
       </div>
     </>

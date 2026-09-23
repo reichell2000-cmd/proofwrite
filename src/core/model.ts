@@ -22,6 +22,8 @@ export interface Assignment {
   id: string;
   title: string;
   description: string;
+  learningGoal?: string;
+  successCriteria?: string[];
   policy: Policy;
   minRead: number;
   fullRead: boolean;
@@ -41,6 +43,26 @@ export interface Review {
   reaction: string;
   completed: boolean;
   updatedAt: number;
+  feedback?: TeacherFeedback;
+}
+export interface TeacherFeedback {
+  quote: string;
+  strength: string;
+  question: string;
+  nextStep: string;
+}
+export const EMPTY_FEEDBACK: TeacherFeedback = {
+  quote: "",
+  strength: "",
+  question: "",
+  nextStep: "",
+};
+export interface LearningResponse {
+  reviewUpdatedAt: number;
+  revisedExcerpt: string;
+  explanation: string;
+  version: number;
+  updatedAt: number;
 }
 export interface Submission {
   id: string;
@@ -59,6 +81,7 @@ export interface Submission {
   createdAt: number;
   updatedAt: number;
   review: Review;
+  learningResponse?: LearningResponse;
   revision: number;
 }
 export interface SyncBody {

@@ -31,6 +31,8 @@ import {
   Download,
 } from "lucide-react";
 import { Header, Notice, Brand } from "./Shell";
+import { LearningFocus } from "./LearningFocus";
+import { LearningFeedback } from "./LearningFeedback";
 import { RichDocument } from "./RichDocument";
 import { api, ApiError } from "../core/api";
 import { extensions } from "../core/editor/extensions";
@@ -719,9 +721,7 @@ function WritingSpace({
             <span>✓ 제출 완료</span>
           </div>
           {localWarning && <Notice error>{localWarning}</Notice>}
-          {s.review.reaction && (
-            <Notice>선생님의 반응: {s.review.reaction}</Notice>
-          )}
+          <LearningFeedback submission={s} />
           <button
             onClick={() =>
               download(
@@ -1178,6 +1178,7 @@ function WritingSpace({
           </div>
         </main>
         <aside className="writing-aside">
+          <LearningFocus assignment={assignment} />
           <div className="aside-card">
             <span className="overline">THOUGHT TRACE</span>
             <h3>생각이 남고 있어요.</h3>
@@ -1232,7 +1233,7 @@ function WritingSpace({
               참고자료 · 출처
               <textarea
                 rows={3}
-                placeholder="참고한 책, 웹 주소, AI와 작업한 내용 등을 남겨주세요."
+                placeholder="자료명·주소, 가져온 부분, 내 생각을 구분해 적어주세요. 허용된 AI 도움도 무엇에 썼는지 남겨주세요."
                 maxLength={6000}
                 value={s.sources}
                 onChange={(e) => {
@@ -1280,6 +1281,19 @@ function WritingSpace({
             <p className="muted">
               제출하면 작성이 마무리되고 선생님께 전달됩니다.
             </p>
+            <details className="learning-focus">
+              <summary>보내기 전, 독자의 눈으로 한 번 읽기</summary>
+              <ul>
+                <li>내가 전하려는 생각을 독자가 찾을 수 있나요?</li>
+                <li>그 생각을 이해할 구체적인 근거나 장면이 있나요?</li>
+                <li>자료에서 가져온 말과 내 생각을 구분했나요?</li>
+                <li>과제에서 함께 보기로 한 기준에 맞나요?</li>
+              </ul>
+              <p>
+                지금 고치고 싶은 곳이 있다면 ‘글로 돌아가기’를 눌러주세요. 답을
+                적거나 모두 체크할 필요는 없어요.
+              </p>
+            </details>
             {!s.pick && (
               <Notice error>
                 본문에서 선생님이 꼭 읽어주셨으면 하는 대목을 선택해주세요.
