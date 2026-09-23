@@ -1,0 +1,14 @@
+services:
+  proofwrite:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PROOFWRITE_TEACHER_PASSWORD: ${PROOFWRITE_TEACHER_PASSWORD:?Set teacher password}
+      PROOFWRITE_SESSION_SECRET: ${PROOFWRITE_SESSION_SECRET:?Set session secret}
+      PROOFWRITE_PUBLIC_ORIGIN: ${PROOFWRITE_PUBLIC_ORIGIN:?Set public HTTPS origin}
+    volumes:
+      - proofwrite-data:/app/data
+    restart: unless-stopped
+volumes:
+  proofwrite-data:

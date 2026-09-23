@@ -1,35 +1,54 @@
-# ProofWrite
+# ProofWrite FREE v0.1
 
 **결과물을 검사하지 않습니다. 만들어지는 과정을 증명합니다.**
 
-ProofWrite FREE v0.1은 AI 시대의 과제·수행평가를 위한 온라인 작성과정 증명 도구입니다.
+교사가 과제를 만들고, 학생이 참여 링크에서 글을 작성·제출하며, 교사가 학생이 고른 대목과 작성과정을 읽는 독립적인 웹 애플리케이션입니다. FREE 흐름에는 LLM API가 없습니다.
 
-## v0.1 핵심
-- 온라인 과제 작성 Editor
-- Evidence Collector (입력/삭제/수정/Paste/세션/창 이탈/버전)
-- Thought Trace — 생각의 흔적
-- My Proof prototype — 작성 리듬 연속성 신호
-- Proof Score — 과정증거 종합지표 (부정행위 확률이 아님)
-- Writing Timeline / Replay
-- Teacher Reading Guide — 교사가 반드시 읽어볼 대목 추천
-- 학생의 ‘선생님께 꼭 보여주고 싶은 대목’
-- FREE core와 향후 AI/PRO 기능 분리를 위한 Feature Flags
+## 실행
 
-## 제품 원칙
-1. AI 사용 여부를 확률로 단정하지 않는다.
-2. 관찰된 사실과 작성과정 증거를 보여주고 최종 판단은 교사에게 둔다.
-3. Proof Score는 본인 작성 확률이 아니라 기록된 과정증거의 충분성이다.
-4. AI는 교사를 대신해 학생을 평가하는 것이 아니라 교사가 어디를 봐야 하는지 돕는다.
-5. ProofWrite 편집기 밖의 키 입력을 수집하지 않는다.
-6. FREE core는 API 비의존형을 우선한다.
+Node.js 22 이상이 필요합니다.
 
-## 개발 순서
-1. 데이터/Event schema
-2. Web Editor
-3. Evidence Collector
-4. Thought Trace
-5. Proof Score
-6. Timeline / Replay
-7. Teacher Dashboard + Reading Guide
-8. My Proof prototype 검증
-9. Pilot QA
+```bash
+npm ci
+cp .env.example .env.local
+# .env.local에 교사 비밀번호(12자 이상), 세션 비밀키(32자 이상)를 입력합니다.
+npm run dev
+```
+
+`http://localhost:3000/teacher`에서 교사 비밀번호로 로그인 → 새 과제 → 학생 참여 링크 복사 → 학생은 별도 브라우저/기기에서 작성합니다. 별명 사용을 권장합니다.
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm start
+# 브라우저 통합시험
+npx playwright install chromium
+npm run test:e2e
+```
+
+브라우저 실행 파일이 이미 있다면 `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/absolute/path/to/chromium npm run test:e2e`를 사용할 수 있습니다.
+
+## 구현된 사용 흐름
+
+- 교사 로그인, 과제 생성, 4가지 AI 사용정책, 최소 읽기 기준, 성찰질문.
+- 학생 참여 링크, 기록 안내, 별명, 현재 브라우저에서 이어쓰기.
+- Tiptap 편집기: 제목, 서식, 크기, 정렬, 목록, 들여쓰기, 표 편집, 이미지, 링크, 인용, 실행 취소/다시 실행, 찾기, 문단 이동.
+- 변경 transaction 기반 이벤트, 한글 composition 묶음, 체크포인트 버전, IndexedDB 복구본, 변경분 서버 동기화, 충돌 감지.
+- 학생의 읽어달라는 대목·이유, 참고자료, 성찰, 제출 후 잠금.
+- 교사 목록, 설명 가능한 과정증거 점수, 선택 대목 우선 읽기 안내, 전체 글, 타임라인, 1/5/20/50배 리플레이, 문서 버전.
+- 외부 텍스트의 문자 단위 잔존·삭제·겹친 수정 통계. 문단 이동 등 불확실한 경우 추정 표시.
+- 최소 읽기 확인을 서버에서도 검사하고, 교사의 빠른 반응을 학생에게 표시.
+- 기록 JSON 및 학생 글 텍스트 다운로드.
+
+## 운영 범위
+
+현재 배포 단위는 **교사 비밀번호 하나 / 한 학급 수준의 단일 Node 프로세스 Pilot**입니다. `.data` 또는 `PROOFWRITE_DATA_DIR`에 실제 파일을 저장하므로 **영속 볼륨이 필수**입니다. 다중 인스턴스·서버리스의 임시 디스크에는 그대로 배포하지 마십시오.
+
+학교 운영 전 기관 계정/SSO, 다중 교사 권한, 계정 복구, 보관·삭제 정책, 실제 기기/한국어 IME/보조입력 검증, 백업·복구 훈련이 필요합니다. 자세한 절차는 [운영 안내](docs/PILOT_RUNBOOK.md), 정확한 구현/검증 범위는 [점검표](docs/IMPLEMENTATION_AUDIT.md)를 참고하세요.
+
+## 점수와 개인정보
+
+Proof Score는 **기록된 과정증거의 충분성에 관한 시범 지표**이며 작성자·AI 사용·부정행위 확률이 아닙니다. 가중치와 구간은 검증되지 않은 Pilot 가설입니다. 붙여넣기·창 이탈만으로 감점하지 않습니다. My Proof는 기본 미참여이며 현재 과제의 시간 파생값만 다룹니다. 미수집/표본 부족이면 해당 없음으로 표시하고 가용 점수만 100점으로 환산합니다.
+
+브라우저 이벤트는 사용자가 조작할 수 있습니다. 서버의 순서·재생 검증은 손상·충돌을 검출하지만 작성자 신원이나 클라이언트가 정직함을 증명하지 않습니다. 교사는 반드시 글을 직접 읽습니다.

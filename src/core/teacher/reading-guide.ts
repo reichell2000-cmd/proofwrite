@@ -1,22 +1,94 @@
-import { EvidenceEvent, WritingSnapshot } from "../evidence/types";
-
-export type ReadingGuideReason = "student_pick" | "major_revision" | "paste_transformation" | "late_revision";
-
+import { features } from "../features";
+import type { EvidenceEvent, WritingSnapshot } from "../evidence/types";
+import { replayAt, textOf } from "../evidence/replay";
 export interface ReadingGuideItem {
-  reason: ReadingGuideReason;
+  id: string;
+  reason:
+    | "student_pick"
+    | "discovery"
+    | "major_revision"
+    | "paste_transformation"
+    | "late_revision";
   title: string;
   detail: string;
-  snapshotSeq?: number;
+  excerpt: string;
   eventSeq?: number;
+  snapshotSeq?: number;
 }
-
-export function buildReadingGuide(events: EvidenceEvent[], snapshots: WritingSnapshot[], studentPick?: string): ReadingGuideItem[] {
-  const items: ReadingGuideItem[]=[];
-  if(studentPick?.trim()) items.push({reason:"student_pick",title:"학생이 선생님께 꼭 보여주고 싶은 대목",detail:studentPick.trim()});
-  const major=events.filter(e=>e.type==="replace" && ((e.insertedChars??0)+(e.deletedChars??0)>=120)).sort((a,b)=>((b.insertedChars??0)+(b.deletedChars??0))-((a.insertedChars??0)+(a.deletedChars??0)))[0];
-  if(major) items.push({reason:"major_revision",title:"변화가 큰 대목",detail:`한 번에 약 ${(major.insertedChars??0)+(major.deletedChars??0)}자 규모로 다시 구성했습니다.`,eventSeq:major.seq});
-  const paste=events.filter(e=>e.type==="paste").sort((a,b)=>(b.insertedChars??0)-(a.insertedChars??0))[0];
-  if(paste) items.push({reason:"paste_transformation",title:"확인할 외부 텍스트 구간",detail:`${paste.insertedChars??0}자가 붙여넣어진 시점과 이후 수정과정을 확인하세요.`,eventSeq:paste.seq});
-  if(snapshots.length>1) items.push({reason:"late_revision",title:"마지막까지 다듬은 부분",detail:"최종 두 버전의 차이를 확인하면 학생이 마지막에 무엇을 고쳤는지 볼 수 있습니다.",snapshotSeq:snapshots.at(-1)?.seq});
-  return items.slice(0,3);
+export function buildReadingGuide(
+  events: EvidenceEvent[],
+  snapshots: WritingSnapshot[],
+  studentPick?: string,
+): ReadingGuideItem[] {
+  if (!features.free.teacherReadingGuide) return [];
+  const items: ReadingGuideItem[] = [];
+  if (studentPick?.trim())
+    items.push({
+      id: "student-pick",
+      reason: "student_pick",
+      title: "학생이 꼭 보여주고 싶은 대목",
+      detail: "학생의 목소리부터 읽어주세요.",
+      excerpt: studentPick.trim(),
+    });
+  const excerpt = (e: EvidenceEvent) => {
+    try {
+      const text = textOf(replayAt(events, snapshots, e.seq));
+      const at = Math.min(e.position ?? 0, text.length);
+      return text
+        .slice(
+          Math.max(0, text.lastIndexOf("\n", at - 1) + 1),
+          Math.min(text.length, at + 280),
+        )
+        .trim();
+    } catch {
+      return "";
+    }
+  };
+  const major = events
+    .filter((e) => (e.deletedChars ?? 0) > 0)
+    .sort(
+      (a, b) =>
+        (b.deletedChars ?? 0) +
+        (b.insertedChars ?? 0) -
+        (a.deletedChars ?? 0) -
+        (a.insertedChars ?? 0),
+    )[0];
+  if (major)
+    items.push({
+      id: `revision-${major.seq}`,
+      reason: "major_revision",
+      title: "↗ 생각을 고쳐 쓴 대목",
+      detail: `${major.deletedChars ?? 0}자 삭제, ${major.insertedChars ?? 0}자 입력. 수정 시점의 문장입니다.`,
+      excerpt: excerpt(major),
+      eventSeq: major.seq,
+    });
+  const paste = events
+    .filter((e) => e.type === "paste")
+    .sort((a, b) => (b.insertedChars ?? 0) - (a.insertedChars ?? 0))[0];
+  if (paste)
+    items.push({
+      id: `paste-${paste.seq}`,
+      reason: "paste_transformation",
+      title: "? 출처와 변화 함께 확인",
+      detail: `${paste.insertedChars ?? 0}자 붙여넣기. 붙여넣기는 AI 사용이나 부정행위의 근거가 아닙니다.`,
+      excerpt: excerpt(paste),
+      eventSeq: paste.seq,
+    });
+  const finalText = snapshots.at(-1)?.text || "";
+  for (const [index, p] of finalText
+    .split("\n")
+    .filter((p) => p.trim())
+    .entries()) {
+    if (items.some((i) => i.excerpt === p.trim())) continue;
+    items.push({
+      id: `passage-${index}`,
+      reason: "discovery",
+      title: "★ 글에서 만나볼 생각",
+      detail:
+        "완성된 글의 대목입니다. 내용의 우수성을 자동 판정한 추천은 아닙니다.",
+      excerpt: p.trim(),
+    });
+    if (items.length >= 5) break;
+  }
+  return items;
 }
