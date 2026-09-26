@@ -54,3 +54,21 @@ export function rhythmContinuity(
     Math.max(80, a.medianFlightMs, b.medianFlightMs);
   return Math.max(0, Math.min(1, 1 - d));
 }
+
+// Compare like input modes: IME composition timing differs from direct typing.
+export function comparableRhythm(
+  samples: RhythmSample[],
+  mode?: "direct" | "composition",
+) {
+  const valid = samples.filter(
+    (x) => x.flightMs !== undefined && x.flightMs > 0 && x.flightMs < 5000,
+  );
+  const direct = valid.filter((x) => x.mode !== "composition");
+  const composition = valid.filter((x) => x.mode === "composition");
+  const selected =
+    mode || (composition.length > direct.length ? "composition" : "direct");
+  return {
+    mode: selected,
+    samples: selected === "composition" ? composition : direct,
+  };
+}

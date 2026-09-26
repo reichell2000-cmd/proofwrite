@@ -1,3 +1,4 @@
+import { findRhythmBaseline } from "../../../../../server/rhythm-baseline";
 import { csrf, requireStudent } from "../../../../../server/auth";
 import { read, write, locked } from "../../../../../server/store";
 import { handler, body, syncSchema } from "../../../../../server/validation";
@@ -16,11 +17,20 @@ export async function POST(
     return locked(async () => {
       const current = await read<Submission>("submissions", id);
       const next = mergeSubmission(current, request);
+      if (
+        next.rhythmOptIn &&
+        !next.rhythmBaseline &&
+        current.status === "draft"
+      )
+        next.rhythmBaseline = await findRhythmBaseline(next);
+      if (!next.rhythmOptIn) delete next.rhythmBaseline;
       await write("submissions", id, next);
       return {
         ackSeq: next.events.at(-1)?.seq || 0,
         revision: next.revision,
         status: next.status,
+        submittedAt: next.submittedAt,
+        rhythmBaseline: next.rhythmBaseline,
       };
     });
   })(req);

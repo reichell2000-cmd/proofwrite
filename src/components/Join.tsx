@@ -46,7 +46,7 @@ export default function Join({
                 { alias, code, consent, resumeId },
               );
               localStorage.setItem(`pw-join-${assignment.id}`, result.id);
-              router.push(`/write/${result.id}`);
+              router.push(`/task/${result.id}`);
             } catch (e) {
               setError((e as Error).message);
               setBusy(false);
@@ -91,7 +91,7 @@ export default function Join({
           </div>
           {error && <Notice error>{error}</Notice>}
           <button className="primary wide" disabled={busy || !consent}>
-            {busy ? "준비 중…" : "글쓰기 시작 · 이어쓰기"}{" "}
+            {busy ? "준비 중…" : "과제 확인 · 참여하기"}{" "}
             <ArrowRight size={17} />
           </button>
         </form>

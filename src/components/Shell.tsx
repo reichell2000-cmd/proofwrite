@@ -6,7 +6,7 @@ export function Brand() {
       <span className="brand-mark">
         <Feather size={20} />
       </span>
-      ProofWrite<span className="free-tag">FREE</span>
+      ProofMe<span className="free-tag">FREE</span>
     </Link>
   );
 }
@@ -16,9 +16,12 @@ export function Header({ children }: { children?: React.ReactNode }) {
       <Brand />
       <nav>
         {children || (
-          <Link href="/teacher">
-            교사 공간 <ArrowUpRight size={15} />
-          </Link>
+          <>
+            <Link href="/student">내 과제</Link>
+            <Link href="/teacher">
+              교사 공간 <ArrowUpRight size={15} />
+            </Link>
+          </>
         )}
       </nav>
     </header>

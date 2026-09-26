@@ -1,7 +1,7 @@
 import { Node } from "@tiptap/pm/model";
 import { schema } from "../core/editor/extensions";
 import { applyEvent, eventTextDelta, textOf } from "../core/evidence/replay";
-import { type Submission, type SyncBody } from "../core/model";
+import { type Submission, type SyncBody, hasEffort } from "../core/model";
 import { HttpError } from "./store";
 export function validateDoc(doc: Record<string, unknown>) {
   const node = Node.fromJSON(schema, doc);
@@ -62,6 +62,8 @@ export function mergeSubmission(
       !fresh.length &&
       request.title === current.title &&
       request.sources === current.sources &&
+      (request.effort === undefined ||
+        JSON.stringify(request.effort) === JSON.stringify(current.effort)) &&
       JSON.stringify(request.pick) === JSON.stringify(current.pick) &&
       JSON.stringify(request.reflections) ===
         JSON.stringify(current.reflections) &&
@@ -140,14 +142,34 @@ export function mergeSubmission(
     );
   if (
     request.submit &&
-    (!request.title ||
-      !text.trim() ||
-      !request.pick ||
-      fresh.at(-1)?.type !== "submit")
+    (!request.title || !text.trim() || fresh.at(-1)?.type !== "submit")
   )
+    throw new HttpError(400, "제목과 본문을 확인해주세요.");
+  const effort = request.effort ?? current.effort;
+  for (const file of effort?.attachments || []) {
+    const prefix = `data:${file.mime};base64,`;
+    if (
+      !file.data.startsWith(prefix) ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(file.data.slice(prefix.length))
+    )
+      throw new HttpError(400, "첨부자료 형식을 확인해주세요.");
+    const bytes = Buffer.from(file.data.slice(prefix.length), "base64");
+    const signature =
+      file.mime === "application/pdf"
+        ? bytes.subarray(0, 5).toString() === "%PDF-"
+        : file.mime === "image/png"
+          ? bytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a"
+          : file.mime === "image/jpeg"
+            ? bytes.subarray(0, 3).toString("hex") === "ffd8ff"
+            : bytes.subarray(0, 4).toString() === "RIFF" &&
+              bytes.subarray(8, 12).toString() === "WEBP";
+    if (bytes.length !== file.size || bytes.length > 524288 || !signature)
+      throw new HttpError(400, "첨부자료의 종류나 크기가 맞지 않습니다.");
+  }
+  if (request.submit && !hasEffort(effort))
     throw new HttpError(
       400,
-      "제목, 본문, 꼭 읽어주셨으면 하는 대목을 확인해주세요.",
+      "노력의 증거에 해본 일 한 가지를 적거나 자료를 첨부해주세요.",
     );
   const next = {
     ...current,
@@ -160,6 +182,8 @@ export function mergeSubmission(
     rhythmOptIn: request.rhythmOptIn,
     title: request.title,
     sources: request.sources,
+    effort,
+    submittedAt: request.submit ? Date.now() : current.submittedAt,
     pick: request.pick,
     reflections: request.reflections,
     status: request.submit ? ("submitted" as const) : ("draft" as const),

@@ -154,3 +154,79 @@ describe("Append-only server synchronization", () => {
     expect(() => mergeSubmission(current, request())).toThrow("제출");
   });
 });
+
+describe("ProofMe submission evidence", () => {
+  function ready() {
+    const r = request();
+    r.submit = true;
+    r.events.push({
+      id: crypto.randomUUID(),
+      submissionId: id,
+      sessionId,
+      seq: 2,
+      type: "submit",
+      at: r.events[0].at,
+    });
+    return r;
+  }
+  it("requires effort evidence and allows submitting without a highlight", () => {
+    const r = ready();
+    expect(() => mergeSubmission(draft(), r)).toThrow("노력의 증거");
+    r.effort = {
+      difficulty: "",
+      attempt: "다른 사례와 비교했다",
+      outcome: "",
+      attachments: [],
+    };
+    const next = mergeSubmission(draft(), r);
+    expect(next.status).toBe("submitted");
+    expect(next.pick).toBeNull();
+    expect(next.submittedAt).toBeGreaterThan(0);
+    expect(mergeSubmission(next, r).submittedAt).toBe(next.submittedAt);
+  });
+  it("preserves new metadata on older clients and rejects stale effort writes", () => {
+    const r = request();
+    r.effort = {
+      difficulty: "",
+      attempt: "자료를 비교함",
+      outcome: "",
+      attachments: [],
+    };
+    const next = mergeSubmission(draft(), r);
+    const stale = { ...r, effort: { ...r.effort, attempt: "다른 시도" } };
+    expect(() => mergeSubmission(next, stale)).toThrow("충돌");
+    expect(
+      mergeSubmission(next, {
+        ...r,
+        baseRevision: next.revision,
+        events: [],
+        effort: undefined,
+      }).effort,
+    ).toEqual(r.effort);
+  });
+  it("checks attachment bytes, not just extension or supplied MIME", () => {
+    const r = ready();
+    r.effort = {
+      difficulty: "",
+      attempt: "",
+      outcome: "",
+      attachments: [
+        {
+          id: crypto.randomUUID(),
+          name: "notes.pdf",
+          mime: "application/pdf",
+          size: 6,
+          data: "data:application/pdf;base64,PGh0bWw+",
+        },
+      ],
+    };
+    expect(() => mergeSubmission(draft(), r)).toThrow("종류나 크기");
+    const data = Buffer.from("%PDF-1.4\n%%EOF");
+    r.effort.attachments[0] = {
+      ...r.effort.attachments[0],
+      size: data.length,
+      data: `data:application/pdf;base64,${data.toString("base64")}`,
+    };
+    expect(mergeSubmission(draft(), r).status).toBe("submitted");
+  });
+});

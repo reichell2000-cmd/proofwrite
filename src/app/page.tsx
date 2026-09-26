@@ -35,6 +35,9 @@ export default function Home() {
               <Link className="button primary" href="/teacher">
                 교사 공간 시작하기 <ArrowRight size={18} />
               </Link>
+              <Link href="/student" className="button outline">
+                내 과제 열기 <ArrowRight size={18} />
+              </Link>
               <a href="#how" className="text-link">
                 어떻게 기록하나요? <ArrowUpRight size={16} />
               </a>
@@ -100,7 +103,7 @@ export default function Home() {
           <div className="section-top">
             <span className="overline">PROCESS, NOT PREDICTION</span>
             <h2>기록은 도구가, 이해는 선생님이.</h2>
-            <p>결과물을 검사하지 않습니다. 만들어지는 과정을 증명합니다.</p>
+            <p>생각·집중·성실·노력·나라는 다섯 가지 증거를 함께 살펴봅니다.</p>
           </div>
           <div className="feature-grid">
             <article>
@@ -140,14 +143,14 @@ export default function Home() {
         <div className="principle">
           <span>OUR PROMISE</span>
           <p>
-            과정증거 점수는 AI 사용이나 본인 작성 확률이 아닙니다.
+            자동 작성 기록과 학생이 제공한 노력 근거를 함께 읽습니다.
             <br />
             학생을 판단하는 대신, 글을 이해할 근거를 제공합니다.
           </p>
         </div>
       </main>
       <footer>
-        <span>ProofWrite · FREE v0.1 Pilot</span>
+        <span>ProofMe · FREE v0.1 Pilot</span>
         <span>생각은 학생에게, 판단은 교사에게.</span>
       </footer>
     </>

@@ -1,5 +1,6 @@
 import type { EvidenceEvent, EvidenceEventType, RhythmSample } from "./types";
 export class EvidenceCollector {
+  private mode: "direct" | "composition" = "direct";
   private lastDown: number | null = null;
   private burst = 0;
   private held: number | null = null;
@@ -33,12 +34,19 @@ export class EvidenceCollector {
     return e;
   }
   // Bound only to editor DOM. No key/code/string values are retained.
-  keyDown(at = performance.now(), correction = false) {
+  keyDown(
+    at = performance.now(),
+    correction = false,
+    mode: "direct" | "composition" = "direct",
+  ) {
+    if (mode !== this.mode) this.resetRhythm();
+    this.mode = mode;
     const flight =
       this.lastDown === null ? undefined : Math.max(0, at - this.lastDown);
     this.burst = flight !== undefined && flight < 1200 ? this.burst + 1 : 1;
     this.rhythm.push({
       at: Date.now(),
+      mode,
       flightMs: flight,
       burstLength: this.burst,
       pauseBeforeMs:

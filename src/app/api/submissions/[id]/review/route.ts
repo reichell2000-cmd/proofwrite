@@ -26,6 +26,7 @@ export async function POST(
         current.events,
         current.snapshots,
         current.pick?.text,
+        { doc: current.doc, priorities: assignment.contentPriorities },
       );
       const ids = new Set(guide.map((g) => g.id));
       const passages = [...new Set(review.passages)].filter((p) => ids.has(p));

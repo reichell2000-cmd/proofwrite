@@ -1,4 +1,9 @@
 "use client";
+import Link from "next/link";
+import { EffortForm, EffortAttachments } from "./EffortForm";
+import { EvidencePanel } from "./EvidencePanel";
+import { fiveEvidence } from "../core/proof/five-evidence";
+import { hasEffort } from "../core/model";
 import { features } from "../core/features";
 import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
@@ -30,7 +35,7 @@ import {
   Save,
   Download,
 } from "lucide-react";
-import { Header, Notice, Brand } from "./Shell";
+import { Header, Notice, Brand, time } from "./Shell";
 import { LearningFocus } from "./LearningFocus";
 import { LearningFeedback } from "./LearningFeedback";
 import { RichDocument } from "./RichDocument";
@@ -75,7 +80,10 @@ export default function Writer({ id }: { id: string }) {
         }>(`/api/submissions/${id}`);
         let local: LocalDraft | undefined;
         try {
-          local = await readLocal(id);
+          local =
+            data.submission.status === "draft"
+              ? await readLocal(id)
+              : undefined;
         } catch {
           /* Server copy remains authoritative. */
         }
@@ -202,6 +210,7 @@ function WritingSpace({
   const [message, setMessage] = useState("저장 준비 중");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [attachmentLoading, setAttachmentLoading] = useState(false);
   const [submitted, setSubmitted] = useState(submission.status === "submitted");
   const [localWarning, setLocalWarning] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -237,12 +246,15 @@ function WritingSpace({
                 : undefined;
           pending.current = {
             type: history,
-            source:
-              e.inputType === "insertText"
-                ? "keyboard"
-                : e.isComposing
-                  ? "composition"
-                  : "unknown",
+            source: [
+              "insertText",
+              "deleteContentBackward",
+              "deleteContentForward",
+            ].includes(e.inputType)
+              ? "keyboard"
+              : e.isComposing
+                ? "composition"
+                : "unknown",
           };
           return false;
         },
@@ -261,25 +273,23 @@ function WritingSpace({
             if (
               features.free.basicMyProofPrototype &&
               live.current.rhythmOptIn &&
-              !e.isComposing &&
               !e.repeat &&
-              e.key !== "Process" &&
-              (e.key.length === 1 ||
+              (e.key === "Process" ||
+                e.key.length === 1 ||
                 ["Backspace", "Delete", "Enter", " "].includes(e.key))
             )
               collector.current?.keyDown(
                 performance.now(),
                 e.key === "Backspace" || e.key === "Delete",
+                composing.current || e.isComposing || e.key === "Process"
+                  ? "composition"
+                  : "direct",
               );
           }
           return false;
         },
         keyup: () => {
-          if (
-            features.free.basicMyProofPrototype &&
-            live.current.rhythmOptIn &&
-            !composing.current
-          )
+          if (features.free.basicMyProofPrototype && live.current.rhythmOptIn)
             collector.current?.keyUp();
           return false;
         },
@@ -294,7 +304,6 @@ function WritingSpace({
         },
         compositionstart: () => {
           composing.current = true;
-          collector.current?.resetRhythm();
           return false;
         },
         compositionend: () => {
@@ -489,7 +498,13 @@ function WritingSpace({
         const dirtyVersion = dirty.current;
         const pendingEvents = copy.events.filter((e) => e.seq > ack.current);
         let response:
-          | { ackSeq: number; revision: number; status: "draft" | "submitted" }
+          | {
+              ackSeq: number;
+              revision: number;
+              status: "draft" | "submitted";
+              submittedAt?: number;
+              rhythmBaseline?: Submission["rhythmBaseline"];
+            }
           | undefined;
         do {
           const batch = pendingEvents.splice(0, 500);
@@ -507,6 +522,7 @@ function WritingSpace({
             rhythmOptIn: copy.rhythmOptIn,
             title: copy.title,
             sources: copy.sources,
+            effort: copy.effort,
             pick: final ? copy.pick : null,
             reflections: copy.reflections,
             submit: submit && final,
@@ -516,6 +532,8 @@ function WritingSpace({
             ackSeq: number;
             revision: number;
             status: "draft" | "submitted";
+            submittedAt?: number;
+            rhythmBaseline?: Submission["rhythmBaseline"];
           }>(`/api/submissions/${submission.id}/sync`, request);
           ack.current = response.ackSeq;
           revision.current = response.revision;
@@ -531,6 +549,8 @@ function WritingSpace({
         setError("");
         if (response.status === "submitted") {
           live.current.status = "submitted";
+          live.current.submittedAt = response.submittedAt;
+          live.current.rhythmBaseline = response.rhythmBaseline;
           setSubmitted(true);
           editorRef.current?.setEditable(false);
           await removeLocal(submission.id).catch(() =>
@@ -717,11 +737,29 @@ function WritingSpace({
           </p>
           <div className="done-meta">
             <span>✓ 작성 기록 저장</span>
-            <span>✓ 선생님께 보여드릴 대목</span>
+            <span>
+              {hasEffort(s.effort)
+                ? "✓ 노력 기록 저장"
+                : "기존 제출 · 노력 항목 없음"}
+            </span>
             <span>✓ 제출 완료</span>
           </div>
+          <p className="fine-print">
+            {s.submittedAt
+              ? `접수 시각 ${time(s.submittedAt)}`
+              : "기존 제출 내역"}{" "}
+            · 접수번호 {s.id.slice(0, 8)}
+          </p>
+          <Link className="button outline" href="/student">
+            내 과제로 돌아가기
+          </Link>
           {localWarning && <Notice error>{localWarning}</Notice>}
           <LearningFeedback submission={s} />
+          <details className="panel text-left">
+            <summary>제출한 노력과 과정 기록</summary>
+            <EvidencePanel axes={fiveEvidence(s, assignment)} />
+            <EffortAttachments effort={s.effort} />
+          </details>
           <button
             onClick={() =>
               download(
@@ -757,7 +795,7 @@ function WritingSpace({
         </div>
         <button
           className="primary"
-          disabled={submitting}
+          disabled={submitting || attachmentLoading}
           onClick={() => {
             checkpoint();
             setReviewOpen(true);
@@ -767,7 +805,8 @@ function WritingSpace({
         </button>
       </header>
       <div className="writer-bar">
-        <span>작성 공간</span>
+        <Link href={`/task/${s.id}`}>← 과제 안내</Link>
+        <span>과제 제출 / 글쓰기</span>
         <span className="policy-inline">
           <b>{assignment.policy}</b> {POLICIES[assignment.policy]}
         </span>
@@ -804,377 +843,424 @@ function WritingSpace({
           </button>
         </div>
       )}
+      <ol className="writing-steps writer-steps">
+        <li>
+          <b>1. 글쓰기</b>
+          <span>작성 기록 자동 저장</span>
+        </li>
+        <li>
+          <a href="#effort-evidence">2. 노력의 증거</a>
+          <span>해본 일·자료 남기기</span>
+        </li>
+        <li>
+          <a href="#submit-bottom">3. 제출</a>
+          <span>마지막에 제출 확인</span>
+        </li>
+      </ol>
       <div className="writing-layout">
         <main className="editor-column">
-          <div className="toolbar" role="toolbar" aria-label="글 편집 도구">
-            <div className="tool-group">
-              <button
-                title="실행 취소"
-                aria-label="실행 취소"
-                onClick={() =>
-                  command(() => editor?.chain().focus().undo().run(), "undo")
-                }
-              >
-                <Undo2 size={17} />
-              </button>
-              <button
-                title="다시 실행"
-                aria-label="다시 실행"
-                onClick={() =>
-                  command(() => editor?.chain().focus().redo().run(), "redo")
-                }
-              >
-                <Redo2 size={17} />
-              </button>
-            </div>
-            <select
-              aria-label="글자 크기"
-              defaultValue="16px"
-              onChange={(e) =>
-                command(() =>
-                  editor
-                    ?.chain()
-                    .focus()
-                    .setMark("textStyle", { fontSize: e.target.value })
-                    .run(),
-                )
-              }
-            >
-              {[12, 14, 16, 18, 20, 24, 28, 32].map((n) => (
-                <option key={n} value={`${n}px`}>
-                  {n}px
-                </option>
-              ))}
-            </select>
-            <div className="tool-group">
-              {[
-                {
-                  title: "굵게",
-                  Icon: Bold,
-                  active: "bold",
-                  run: () => editor?.chain().focus().toggleBold().run(),
-                },
-                {
-                  title: "기울임",
-                  Icon: Italic,
-                  active: "italic",
-                  run: () => editor?.chain().focus().toggleItalic().run(),
-                },
-                {
-                  title: "밑줄",
-                  Icon: Underline,
-                  active: "underline",
-                  run: () => editor?.chain().focus().toggleUnderline().run(),
-                },
-              ].map(({ title, Icon, active, run }) => (
+          <div className="editor-workspace">
+            <div className="toolbar" role="toolbar" aria-label="글 편집 도구">
+              <div className="tool-group">
                 <button
-                  key={title}
-                  aria-label={title}
-                  title={title}
-                  aria-pressed={editor?.isActive(active) || false}
-                  onClick={() => command(run)}
+                  title="실행 취소"
+                  aria-label="실행 취소"
+                  onClick={() =>
+                    command(() => editor?.chain().focus().undo().run(), "undo")
+                  }
                 >
-                  <Icon size={17} />
+                  <Undo2 size={17} />
                 </button>
-              ))}
-            </div>
-            <div className="tool-group">
-              {[
-                { align: "left", name: "왼쪽 정렬", Icon: AlignLeft },
-                { align: "center", name: "가운데 정렬", Icon: AlignCenter },
-                { align: "right", name: "오른쪽 정렬", Icon: AlignRight },
-              ].map(({ align, name, Icon }) => (
                 <button
-                  key={align}
-                  title={name}
-                  aria-label={name}
+                  title="다시 실행"
+                  aria-label="다시 실행"
+                  onClick={() =>
+                    command(() => editor?.chain().focus().redo().run(), "redo")
+                  }
+                >
+                  <Redo2 size={17} />
+                </button>
+              </div>
+              <select
+                aria-label="글자 크기"
+                defaultValue="16px"
+                onChange={(e) =>
+                  command(() =>
+                    editor
+                      ?.chain()
+                      .focus()
+                      .setMark("textStyle", { fontSize: e.target.value })
+                      .run(),
+                  )
+                }
+              >
+                {[12, 14, 16, 18, 20, 24, 28, 32].map((n) => (
+                  <option key={n} value={`${n}px`}>
+                    {n}px
+                  </option>
+                ))}
+              </select>
+              <div className="tool-group">
+                {[
+                  {
+                    title: "굵게",
+                    Icon: Bold,
+                    active: "bold",
+                    run: () => editor?.chain().focus().toggleBold().run(),
+                  },
+                  {
+                    title: "기울임",
+                    Icon: Italic,
+                    active: "italic",
+                    run: () => editor?.chain().focus().toggleItalic().run(),
+                  },
+                  {
+                    title: "밑줄",
+                    Icon: Underline,
+                    active: "underline",
+                    run: () => editor?.chain().focus().toggleUnderline().run(),
+                  },
+                ].map(({ title, Icon, active, run }) => (
+                  <button
+                    key={title}
+                    aria-label={title}
+                    title={title}
+                    aria-pressed={editor?.isActive(active) || false}
+                    onClick={() => command(run)}
+                  >
+                    <Icon size={17} />
+                  </button>
+                ))}
+              </div>
+              <div className="tool-group">
+                {[
+                  { align: "left", name: "왼쪽 정렬", Icon: AlignLeft },
+                  { align: "center", name: "가운데 정렬", Icon: AlignCenter },
+                  { align: "right", name: "오른쪽 정렬", Icon: AlignRight },
+                ].map(({ align, name, Icon }) => (
+                  <button
+                    key={align}
+                    title={name}
+                    aria-label={name}
+                    onClick={() =>
+                      command(() =>
+                        editor?.chain().focus().setTextAlign(align).run(),
+                      )
+                    }
+                  >
+                    <Icon size={17} />
+                  </button>
+                ))}
+              </div>
+              <div className="tool-group">
+                <button
+                  title="글머리 기호"
+                  aria-label="글머리 기호"
                   onClick={() =>
                     command(() =>
-                      editor?.chain().focus().setTextAlign(align).run(),
+                      editor?.chain().focus().toggleBulletList().run(),
                     )
                   }
                 >
-                  <Icon size={17} />
+                  <List size={17} />
                 </button>
-              ))}
+                <button
+                  title="번호 목록"
+                  aria-label="번호 목록"
+                  onClick={() =>
+                    command(() =>
+                      editor?.chain().focus().toggleOrderedList().run(),
+                    )
+                  }
+                >
+                  <ListOrdered size={17} />
+                </button>
+                <button
+                  title="들여쓰기"
+                  aria-label="들여쓰기"
+                  onClick={() => indent(1)}
+                >
+                  <IndentIncrease size={17} />
+                </button>
+                <button
+                  title="내어쓰기"
+                  aria-label="내어쓰기"
+                  onClick={() => indent(-1)}
+                >
+                  <IndentDecrease size={17} />
+                </button>
+              </div>
+              <div className="tool-group">
+                <button
+                  title="인용문"
+                  aria-label="인용문"
+                  onClick={() =>
+                    command(() =>
+                      editor?.chain().focus().toggleBlockquote().run(),
+                    )
+                  }
+                >
+                  <Quote size={17} />
+                </button>
+                <button
+                  title="표 삽입"
+                  aria-label="표 삽입"
+                  onClick={() =>
+                    command(
+                      () =>
+                        editor
+                          ?.chain()
+                          .focus()
+                          .insertTable({
+                            rows: 3,
+                            cols: 3,
+                            withHeaderRow: true,
+                          })
+                          .run(),
+                      "table_change",
+                    )
+                  }
+                >
+                  <Table size={17} />
+                </button>
+                <button
+                  title="이미지 삽입"
+                  aria-label="이미지 삽입"
+                  onClick={() => imageInput.current?.click()}
+                >
+                  <ImageIcon size={17} />
+                </button>
+                <button
+                  title="링크 삽입"
+                  aria-label="링크 삽입"
+                  onClick={() => setLinkOpen(!linkOpen)}
+                >
+                  <LinkIcon size={17} />
+                </button>
+              </div>
+              <div className="tool-group">
+                <button
+                  aria-label="문단 위로"
+                  title="문단 위로"
+                  onClick={() => move(-1)}
+                >
+                  <ArrowUp size={17} />
+                </button>
+                <button
+                  aria-label="문단 아래로"
+                  title="문단 아래로"
+                  onClick={() => move(1)}
+                >
+                  <ArrowDown size={17} />
+                </button>
+              </div>
             </div>
-            <div className="tool-group">
-              <button
-                title="글머리 기호"
-                aria-label="글머리 기호"
-                onClick={() =>
-                  command(() =>
-                    editor?.chain().focus().toggleBulletList().run(),
-                  )
+            {editor?.isActive("table") && (
+              <div className="context-tools">
+                <button
+                  onClick={() =>
+                    command(
+                      () => editor.chain().focus().addRowAfter().run(),
+                      "table_change",
+                    )
+                  }
+                >
+                  행 추가
+                </button>
+                <button
+                  onClick={() =>
+                    command(
+                      () => editor.chain().focus().addColumnAfter().run(),
+                      "table_change",
+                    )
+                  }
+                >
+                  열 추가
+                </button>
+                <button
+                  onClick={() =>
+                    command(
+                      () => editor.chain().focus().deleteRow().run(),
+                      "table_change",
+                    )
+                  }
+                >
+                  행 삭제
+                </button>
+                <button
+                  onClick={() =>
+                    command(
+                      () => editor.chain().focus().deleteColumn().run(),
+                      "table_change",
+                    )
+                  }
+                >
+                  열 삭제
+                </button>
+                <button
+                  onClick={() =>
+                    command(
+                      () => editor.chain().focus().deleteTable().run(),
+                      "table_change",
+                    )
+                  }
+                >
+                  표 삭제
+                </button>
+              </div>
+            )}
+            <input
+              ref={imageInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (
+                  !["image/png", "image/jpeg", "image/webp"].includes(
+                    file.type,
+                  ) ||
+                  file.size > 250000
+                ) {
+                  setError("250KB 이하의 PNG·JPEG·WebP 이미지를 선택해주세요.");
+                  return;
                 }
-              >
-                <List size={17} />
-              </button>
-              <button
-                title="번호 목록"
-                aria-label="번호 목록"
-                onClick={() =>
-                  command(() =>
-                    editor?.chain().focus().toggleOrderedList().run(),
-                  )
-                }
-              >
-                <ListOrdered size={17} />
-              </button>
-              <button
-                title="들여쓰기"
-                aria-label="들여쓰기"
-                onClick={() => indent(1)}
-              >
-                <IndentIncrease size={17} />
-              </button>
-              <button
-                title="내어쓰기"
-                aria-label="내어쓰기"
-                onClick={() => indent(-1)}
-              >
-                <IndentDecrease size={17} />
-              </button>
-            </div>
-            <div className="tool-group">
-              <button
-                title="인용문"
-                aria-label="인용문"
-                onClick={() =>
-                  command(() =>
-                    editor?.chain().focus().toggleBlockquote().run(),
-                  )
-                }
-              >
-                <Quote size={17} />
-              </button>
-              <button
-                title="표 삽입"
-                aria-label="표 삽입"
-                onClick={() =>
+                const reader = new FileReader();
+                reader.onload = () =>
                   command(
                     () =>
                       editor
                         ?.chain()
                         .focus()
-                        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                        .setImage({
+                          src: String(reader.result),
+                          alt: file.name,
+                        })
                         .run(),
-                    "table_change",
-                  )
-                }
-              >
-                <Table size={17} />
-              </button>
-              <button
-                title="이미지 삽입"
-                aria-label="이미지 삽입"
-                onClick={() => imageInput.current?.click()}
-              >
-                <ImageIcon size={17} />
-              </button>
-              <button
-                title="링크 삽입"
-                aria-label="링크 삽입"
-                onClick={() => setLinkOpen(!linkOpen)}
-              >
-                <LinkIcon size={17} />
-              </button>
-            </div>
-            <div className="tool-group">
-              <button
-                aria-label="문단 위로"
-                title="문단 위로"
-                onClick={() => move(-1)}
-              >
-                <ArrowUp size={17} />
-              </button>
-              <button
-                aria-label="문단 아래로"
-                title="문단 아래로"
-                onClick={() => move(1)}
-              >
-                <ArrowDown size={17} />
-              </button>
-            </div>
-          </div>
-          {editor?.isActive("table") && (
-            <div className="context-tools">
-              <button
-                onClick={() =>
-                  command(
-                    () => editor.chain().focus().addRowAfter().run(),
-                    "table_change",
-                  )
-                }
-              >
-                행 추가
-              </button>
-              <button
-                onClick={() =>
-                  command(
-                    () => editor.chain().focus().addColumnAfter().run(),
-                    "table_change",
-                  )
-                }
-              >
-                열 추가
-              </button>
-              <button
-                onClick={() =>
-                  command(
-                    () => editor.chain().focus().deleteRow().run(),
-                    "table_change",
-                  )
-                }
-              >
-                행 삭제
-              </button>
-              <button
-                onClick={() =>
-                  command(
-                    () => editor.chain().focus().deleteColumn().run(),
-                    "table_change",
-                  )
-                }
-              >
-                열 삭제
-              </button>
-              <button
-                onClick={() =>
-                  command(
-                    () => editor.chain().focus().deleteTable().run(),
-                    "table_change",
-                  )
-                }
-              >
-                표 삭제
-              </button>
-            </div>
-          )}
-          <input
-            ref={imageInput}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            hidden
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (!file) return;
-              if (
-                !["image/png", "image/jpeg", "image/webp"].includes(
-                  file.type,
-                ) ||
-                file.size > 250000
-              ) {
-                setError("250KB 이하의 PNG·JPEG·WebP 이미지를 선택해주세요.");
-                return;
-              }
-              const reader = new FileReader();
-              reader.onload = () =>
-                command(
-                  () =>
-                    editor
-                      ?.chain()
-                      .focus()
-                      .setImage({ src: String(reader.result), alt: file.name })
-                      .run(),
-                  "image_insert",
-                );
-              reader.readAsDataURL(file);
-            }}
-          />
-          {linkOpen && (
-            <form
-              className="inline-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!/^https?:\/\//i.test(url)) {
-                  setError(
-                    "https:// 또는 http://로 시작하는 주소를 입력해주세요.",
+                    "image_insert",
                   );
-                  return;
-                }
-                command(
-                  () =>
-                    editor
-                      ?.chain()
-                      .focus()
-                      .extendMarkRange("link")
-                      .setLink({ href: url })
-                      .run(),
-                  "link_insert",
-                );
-                setLinkOpen(false);
-                setUrl("");
+                reader.readAsDataURL(file);
               }}
-            >
-              <input
-                aria-label="링크 주소"
-                placeholder="https://… (링크를 넣을 글을 먼저 선택)"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
-              <button>적용</button>
-              <button
-                type="button"
-                onClick={() => {
+            />
+            {linkOpen && (
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!/^https?:\/\//i.test(url)) {
+                    setError(
+                      "https:// 또는 http://로 시작하는 주소를 입력해주세요.",
+                    );
+                    return;
+                  }
                   command(
-                    () => editor?.chain().focus().unsetLink().run(),
+                    () =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .extendMarkRange("link")
+                        .setLink({ href: url })
+                        .run(),
                     "link_insert",
                   );
                   setLinkOpen(false);
+                  setUrl("");
                 }}
               >
-                링크 해제
+                <input
+                  aria-label="링크 주소"
+                  placeholder="https://… (링크를 넣을 글을 먼저 선택)"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                />
+                <button>적용</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    command(
+                      () => editor?.chain().focus().unsetLink().run(),
+                      "link_insert",
+                    );
+                    setLinkOpen(false);
+                  }}
+                >
+                  링크 해제
+                </button>
+              </form>
+            )}
+            <div className="find-bar">
+              <Search size={15} />
+              <input
+                aria-label="본문에서 찾기"
+                placeholder="본문에서 찾기"
+                value={find}
+                onChange={(e) => setFind(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") findNext();
+                }}
+              />
+              <button className="subtle" onClick={findNext}>
+                다음 찾기
               </button>
-            </form>
-          )}
-          <div className="find-bar">
-            <Search size={15} />
-            <input
-              aria-label="본문에서 찾기"
-              placeholder="본문에서 찾기"
-              value={find}
-              onChange={(e) => setFind(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") findNext();
-              }}
-            />
-            <button className="subtle" onClick={findNext}>
-              다음 찾기
-            </button>
-            <small role="status">{findMessage}</small>
-          </div>
-          <article className="writing-paper">
-            <input
-              className="document-title"
-              aria-label="글 제목"
-              placeholder="나의 생각에 제목을 붙여주세요"
-              value={s.title}
-              maxLength={160}
-              onChange={(e) => {
-                s.title = e.target.value;
-                bump();
-              }}
-            />
-            <div className="document-byline">
-              {s.alias} <span>·</span> 생각을 자유롭게 펼쳐보세요.
+              <small role="status">{findMessage}</small>
             </div>
-            <EditorContent editor={editor} />
-          </article>
-          <div className="document-footer">
-            <span>
-              {textOf(s.doc).length.toLocaleString()}자 · {s.snapshots.length}개
-              버전
-            </span>
-            <button
-              className="subtle"
-              onClick={() =>
-                download(`${s.title || "나의 글"}.txt`, textOf(s.doc))
-              }
-            >
-              <Download size={14} />글 내려받기
-            </button>
+            <article className="writing-paper">
+              <input
+                className="document-title"
+                aria-label="글 제목"
+                placeholder="나의 생각에 제목을 붙여주세요"
+                value={s.title}
+                maxLength={160}
+                onChange={(e) => {
+                  s.title = e.target.value;
+                  bump();
+                }}
+              />
+              <div className="document-byline">
+                {s.alias} <span>·</span> 생각을 자유롭게 펼쳐보세요.
+              </div>
+              <EditorContent editor={editor} />
+            </article>
+            <div className="document-footer">
+              <span>
+                {textOf(s.doc).length.toLocaleString()}자 · {s.snapshots.length}
+                개 버전
+              </span>
+              <button
+                className="subtle"
+                onClick={() =>
+                  download(`${s.title || "나의 글"}.txt`, textOf(s.doc))
+                }
+              >
+                <Download size={14} />글 내려받기
+              </button>
+            </div>
+          </div>
+          <EffortForm
+            value={s.effort}
+            disabled={submitting}
+            onLoading={setAttachmentLoading}
+            onChange={(value) => {
+              s.effort = value;
+              bump();
+            }}
+          />
+          <div className="panel">
+            <label>
+              참고자료 · 출처
+              <textarea
+                rows={3}
+                placeholder="자료명·주소, 가져온 부분, 내 생각을 구분해 적어주세요. 허용된 AI 도움도 무엇에 썼는지 남겨주세요."
+                maxLength={6000}
+                value={s.sources}
+                onChange={(e) => {
+                  s.sources = e.target.value;
+                  bump();
+                }}
+              />
+            </label>
           </div>
         </main>
         <aside className="writing-aside">
@@ -1205,7 +1291,9 @@ function WritingSpace({
           </div>
           <div className="aside-card pick-card">
             <Star size={20} />
-            <h3>선생님, 여기를 읽어주세요.</h3>
+            <h3>
+              선생님, 여기를 읽어주세요. <small>(선택)</small>
+            </h3>
             <p>본문에서 문장이나 문단을 선택한 뒤 아래 버튼을 눌러주세요.</p>
             <button className="outline wide" onClick={choosePick}>
               선택한 대목 담기
@@ -1213,6 +1301,15 @@ function WritingSpace({
             {s.pick && (
               <>
                 <blockquote>{s.pick.text}</blockquote>
+                <button
+                  className="subtle"
+                  onClick={() => {
+                    s.pick = null;
+                    bump();
+                  }}
+                >
+                  선택 대목 지우기
+                </button>
                 <label>
                   이 대목을 고른 이유 <small>(선택)</small>
                   <textarea
@@ -1228,26 +1325,12 @@ function WritingSpace({
               </>
             )}
           </div>
-          <div className="aside-card">
-            <label>
-              참고자료 · 출처
-              <textarea
-                rows={3}
-                placeholder="자료명·주소, 가져온 부분, 내 생각을 구분해 적어주세요. 허용된 AI 도움도 무엇에 썼는지 남겨주세요."
-                maxLength={6000}
-                value={s.sources}
-                onChange={(e) => {
-                  s.sources = e.target.value;
-                  bump();
-                }}
-              />
-            </label>
-          </div>
           <details className="aside-card">
             <summary>작성 리듬 연구 설정</summary>
             <p>
-              선택 참여입니다. 현재 과제 안에서 입력 간격만 연구합니다. 한글
-              조합 중에는 측정을 제외하며, 신원 판별에는 사용하지 않습니다.
+              선택 참여입니다. 입력 간격을 자동 비교합니다. 같은 브라우저·별명의
+              이전 제출 기록이 있으면 기준으로 삼습니다. 한글 조합과 일반 입력은
+              따로 비교하며, 신원 판별에는 사용하지 않습니다.
             </p>
             <label className="check-label">
               <input
@@ -1263,10 +1346,30 @@ function WritingSpace({
                   bump();
                 }}
               />
-              현재 과제 리듬 연구에 참여
+              타이핑 습관 비교에 참여
             </label>
           </details>
         </aside>
+        <section className="submit-bottom" id="submit-bottom">
+          <div>
+            <h2>과제를 제출할 준비가 되었나요?</h2>
+            <p className="muted">
+              자동 저장한 글은 아직 제출되지 않았어요. 아래에서 확인 후
+              제출해주세요.
+            </p>
+            <small>자동 저장 상태는 화면 상단에서 확인할 수 있어요.</small>
+          </div>
+          <button
+            className="primary"
+            disabled={submitting || attachmentLoading}
+            onClick={() => {
+              checkpoint();
+              setReviewOpen(true);
+            }}
+          >
+            제출 확인하기 <Send size={16} />
+          </button>
+        </section>
       </div>
       {reviewOpen && (
         <div className="modal-backdrop">
@@ -1277,7 +1380,7 @@ function WritingSpace({
             aria-labelledby="submit-title"
           >
             <p className="overline">BEFORE YOU SEND</p>
-            <h2 id="submit-title">생각을 한 번 돌아볼까요?</h2>
+            <h2 id="submit-title">제출 내용을 확인해주세요.</h2>
             <p className="muted">
               제출하면 작성이 마무리되고 선생님께 전달됩니다.
             </p>
@@ -1294,10 +1397,41 @@ function WritingSpace({
                 적거나 모두 체크할 필요는 없어요.
               </p>
             </details>
-            {!s.pick && (
-              <Notice error>
-                본문에서 선생님이 꼭 읽어주셨으면 하는 대목을 선택해주세요.
-              </Notice>
+            <ul className="submit-checklist">
+              <li>{s.title.trim() ? "✓ 제목 작성" : "제목이 필요해요"}</li>
+              <li>
+                {textOf(s.doc).trim()
+                  ? `✓ 본문 ${textOf(s.doc).length}자`
+                  : "본문이 필요해요"}
+              </li>
+              <li>
+                {hasEffort(s.effort)
+                  ? "✓ 노력의 증거 작성"
+                  : "해본 일 한 가지 또는 첨부자료가 필요해요"}
+              </li>
+              <li>
+                노력 자료 {s.effort?.attachments.length || 0}개 · 선택 대목{" "}
+                {s.pick ? "있음" : "없음 (선택 항목)"}
+              </li>
+            </ul>
+            {!hasEffort(s.effort) && (
+              <button
+                onClick={() => {
+                  setReviewOpen(false);
+                  setTimeout(
+                    () =>
+                      document
+                        .getElementById("effort-evidence")
+                        ?.scrollIntoView({ behavior: "smooth" }),
+                    0,
+                  );
+                }}
+              >
+                노력의 증거 작성하러 가기
+              </button>
+            )}
+            {(!s.title.trim() || !textOf(s.doc).trim()) && (
+              <Notice>글로 돌아가 제목과 본문을 작성해주세요.</Notice>
             )}
             {s.pick && <blockquote>{s.pick.text}</blockquote>}
             {assignment.questions.map((question, i) => (
@@ -1327,7 +1461,8 @@ function WritingSpace({
                 className="primary"
                 disabled={
                   submitting ||
-                  !s.pick ||
+                  !hasEffort(s.effort) ||
+                  attachmentLoading ||
                   !s.title.trim() ||
                   !textOf(s.doc).trim()
                 }

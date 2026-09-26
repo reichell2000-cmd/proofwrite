@@ -24,3 +24,20 @@ describe("distinct reading opportunities", () => {
     expect(buildReadingGuide([], [snapshot("\n  \n")], "  ")).toEqual([]);
   });
 });
+
+it("prioritizes content cues in the final document and gives exact excerpts", () => {
+  const text =
+    "처음에는 성공만 중요하다고 생각했다. 하지만 지금은 시도 자체도 중요하다고 느낀다.";
+  const doc = {
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  };
+  const guide = buildReadingGuide([], [snapshot("오래된 문장")], undefined, {
+    doc,
+    priorities: ["perspective"],
+  });
+  expect(guide[0].reason).toBe("content_priority");
+  expect(guide[0].excerpt).toBe(text);
+  expect(guide[0].question).toContain("관점");
+  expect(guide.some((item) => item.excerpt === "오래된 문장")).toBe(false);
+});

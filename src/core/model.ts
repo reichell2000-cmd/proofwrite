@@ -18,10 +18,46 @@ export const REFLECTIONS = [
   "처음 생각과 지금 생각에서 달라진 것이 있나요?",
   "이 과제를 통해 새롭게 배운 것은 무엇인가요?",
 ];
+export const CONTENT_PRIORITIES = {
+  argument: "주장·근거",
+  perspective: "관점 변화",
+  interpretation: "자기 해석",
+  logic: "정확성·논리",
+  application: "배움·적용",
+} as const;
+export type ContentPriority = keyof typeof CONTENT_PRIORITIES;
+export const DEFAULT_PRIORITIES: ContentPriority[] = [
+  "argument",
+  "perspective",
+  "interpretation",
+];
+export interface EffortAttachment {
+  id: string;
+  name: string;
+  mime: "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
+  size: number;
+  data: string;
+}
+export interface EffortEvidence {
+  difficulty: string;
+  attempt: string;
+  outcome: string;
+  attachments: EffortAttachment[];
+}
+export const EMPTY_EFFORT: EffortEvidence = {
+  difficulty: "",
+  attempt: "",
+  outcome: "",
+  attachments: [],
+};
+export const hasEffort = (effort?: EffortEvidence) =>
+  !!(effort?.attempt.trim() || effort?.attachments.length);
 export interface Assignment {
   id: string;
   title: string;
   description: string;
+  dueAt?: number | null;
+  contentPriorities?: ContentPriority[];
   learningGoal?: string;
   successCriteria?: string[];
   policy: Policy;
@@ -65,11 +101,18 @@ export interface LearningResponse {
   updatedAt: number;
 }
 export interface Submission {
+  rhythmBaseline?: {
+    mode?: "direct" | "composition";
+    profile: import("./my-proof/rhythm").RhythmProfile;
+    submissionId: string;
+    capturedAt: number;
+  };
   id: string;
   assignmentId: string;
   alias: string;
   title: string;
   sources: string;
+  effort?: EffortEvidence;
   doc: Doc;
   events: EvidenceEvent[];
   snapshots: WritingSnapshot[];
@@ -77,6 +120,7 @@ export interface Submission {
   rhythmOptIn: boolean;
   pick: StudentPick | null;
   reflections: string[];
+  submittedAt?: number;
   status: "draft" | "submitted";
   createdAt: number;
   updatedAt: number;
@@ -92,6 +136,7 @@ export interface SyncBody {
   rhythmOptIn: boolean;
   title: string;
   sources: string;
+  effort?: EffortEvidence;
   pick: StudentPick | null;
   reflections: string[];
   submit: boolean;

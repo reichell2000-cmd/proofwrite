@@ -30,9 +30,13 @@ import {
   EMPTY_FEEDBACK,
   type TeacherFeedback,
 } from "../core/model";
-import { submissionScore } from "../core/proof/submission-score";
+import { fiveEvidence } from "../core/proof/five-evidence";
+import { EvidencePanel } from "./EvidencePanel";
+import { EffortAttachments } from "./EffortForm";
+import { AssignmentSettings, PriorityChoices } from "./AssignmentSettings";
+import { DEFAULT_PRIORITIES, type ContentPriority } from "../core/model";
 import { summarizeEvidence } from "../core/evidence/summarize";
-import { externalTransformation } from "../core/evidence/replay";
+import { textOf, externalTransformation } from "../core/evidence/replay";
 import { buildReadingGuide } from "../core/teacher/reading-guide";
 type Row = {
   id: string;
@@ -59,9 +63,12 @@ export default function Teacher() {
   const [description, setDescription] = useState("");
   const [learningGoal, setLearningGoal] = useState("");
   const [criteria, setCriteria] = useState("");
+  const [due, setDue] = useState("");
+  const [priorities, setPriorities] =
+    useState<ContentPriority[]>(DEFAULT_PRIORITIES);
   const [policy, setPolicy] = useState<Policy>("COACH");
   const [minRead, setMinRead] = useState("2");
-  const [questions, setQuestions] = useState<string[]>([REFLECTIONS[3]]);
+  const [questions, setQuestions] = useState<string[]>([]);
   const [custom, setCustom] = useState("");
   async function load() {
     try {
@@ -226,9 +233,9 @@ export default function Teacher() {
               다음 배움으로.
             </p>
             <small>
-              Proof는 과정증거의 충분성을
+              ProofMe는 다섯 가지 증거를
               <br />
-              살펴보는 시범 지표입니다.
+              함께 살펴보는 공간입니다.
             </small>
           </div>
         </aside>
@@ -298,6 +305,16 @@ export default function Teacher() {
                       />
                     </details>
                   </div>
+                  <AssignmentSettings
+                    key={active.id}
+                    assignment={active}
+                    onSave={(updated) => {
+                      setActive(updated);
+                      setAssignments((old) =>
+                        old.map((a) => (a.id === updated.id ? updated : a)),
+                      );
+                    }}
+                  />
                   <div className="stat-grid">
                     <div>
                       <Users size={19} />
@@ -445,9 +462,8 @@ export default function Teacher() {
                     )}
                   </div>
                   <p className="fine-print">
-                    Proof는 기록된 과정증거의 충분성을 요약한 시범 지표입니다.
-                    글의 수준이나 노력·성실성·본인 작성 여부를 평가하지
-                    않습니다. 먼저 글을 읽고, 필요할 때 작성과정을 살펴보세요.
+                    학생의 내용과 다섯 가지 과정 증거를 함께 살펴보세요. 자동
+                    기록과 학생이 제공한 노력 근거를 구분해 보여드립니다.
                   </p>
                 </>
               ) : (
@@ -480,6 +496,8 @@ export default function Teacher() {
                     title,
                     description,
                     learningGoal,
+                    dueAt: due ? new Date(due).getTime() : null,
+                    contentPriorities: priorities,
                     successCriteria: criteria
                       .split("\n")
                       .map((x) => x.trim())
@@ -500,6 +518,8 @@ export default function Teacher() {
                 setDescription("");
                 setLearningGoal("");
                 setCriteria("");
+                setDue("");
+                setPriorities(DEFAULT_PRIORITIES);
                 setCustom("");
               } catch (e) {
                 setError((e as Error).message);
@@ -557,6 +577,15 @@ export default function Teacher() {
               학년과 글의 종류에 맞게 적어주세요. 분량·속도·수정 횟수보다 글에서
               배울 내용을 기준으로 삼아주세요.
             </p>
+            <label>
+              제출 마감일 <small>(선택 · 이 기기의 시간대)</small>
+              <input
+                type="datetime-local"
+                value={due}
+                onChange={(e) => setDue(e.target.value)}
+              />
+            </label>
+            <PriorityChoices value={priorities} onChange={setPriorities} />
             <div className="form-grid">
               <label>
                 AI 사용정책
@@ -627,7 +656,7 @@ export default function Teacher() {
               >
                 취소
               </button>
-              <button className="primary" disabled={busy}>
+              <button className="primary" disabled={busy || !priorities.length}>
                 {busy ? "만드는 중…" : "과제 만들기"}
                 <ArrowRight size={16} />
               </button>
@@ -650,6 +679,9 @@ function ReviewPanel({
   const [s, setS] = useState<Submission | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("full");
+  const [contextParagraph, setContextParagraph] = useState<
+    number | undefined
+  >();
   const [target, setTarget] = useState<number | undefined>();
   const [review, setReview] = useState<Review | null>(null);
   const [saving, setSaving] = useState(false);
@@ -673,12 +705,15 @@ function ReviewPanel({
       s
         ? {
             summary: summarizeEvidence(s.events),
-            score: submissionScore(s),
-            guide: buildReadingGuide(s.events, s.snapshots, s.pick?.text),
+            axes: fiveEvidence(s, assignment),
+            guide: buildReadingGuide(s.events, s.snapshots, s.pick?.text, {
+              doc: s.doc,
+              priorities: assignment.contentPriorities,
+            }),
             pastes: externalTransformation(s.events),
           }
         : null,
-    [s],
+    [s, assignment],
   );
   if (!s || !derived || !review)
     return (
@@ -690,7 +725,7 @@ function ReviewPanel({
         )}
       </>
     );
-  const { summary, score, guide, pastes } = derived;
+  const { summary, axes, guide, pastes } = derived;
   const feedback = review.feedback || EMPTY_FEEDBACK;
   const feedbackReady = !!(
     feedback.quote.trim() &&
@@ -707,7 +742,9 @@ function ReviewPanel({
   };
   const fulfilled =
     review.fullRead ||
-    (!assignment.fullRead && review.passages.length >= assignment.minRead);
+    (!assignment.fullRead &&
+      review.passages.filter((id) => guide.some((item) => item.id === id))
+        .length >= assignment.minRead);
   const jump = (seq: number) => {
     setTarget(seq);
     setTab("replay");
@@ -795,6 +832,7 @@ function ReviewPanel({
               { key: "full", text: "전체 글", Icon: FileText },
               { key: "guide", text: "읽기 안내", Icon: Star },
               { key: "replay", text: "작성과정", Icon: History },
+              { key: "evidence", text: "다섯 가지 증거", Icon: Check },
             ].map(({ key, text, Icon }) => (
               <button
                 key={key}
@@ -810,7 +848,9 @@ function ReviewPanel({
             <>
               <div className="reading-intro">
                 <h2>여기에서 읽기를 시작하세요.</h2>
-                <p>학생이 고른 대목과 변화가 남은 문장을 먼저 만나보세요.</p>
+                <p>
+                  선택한 내용 기준에 맞는 읽기 후보와 학생의 대목을 살펴보세요.
+                </p>
               </div>
               {guide.map((item) => (
                 <article
@@ -830,17 +870,33 @@ function ReviewPanel({
                       "이 시점의 작성과정에서 변경 내용을 확인해주세요."}
                   </blockquote>
                   <p className="muted">{item.detail}</p>
+                  {item.question && (
+                    <p className="reading-question">
+                      <b>살펴볼 질문</b> · {item.question}
+                    </p>
+                  )}
                   {item.reason === "student_pick" && s.pick?.why && (
                     <div className="student-why">학생의 말 · {s.pick.why}</div>
                   )}
                   <div className="reading-actions">
-                    {item.reason === "student_pick" && (
+                    {textOf(s.doc).includes(item.excerpt) && (
                       <button
                         className="subtle"
                         disabled={s.status !== "submitted"}
                         onClick={() => updateFeedback("quote", item.excerpt)}
                       >
                         이 대목에 피드백 쓰기
+                      </button>
+                    )}
+                    {item.paragraphIndex !== undefined && (
+                      <button
+                        className="subtle"
+                        onClick={() => {
+                          setContextParagraph(item.paragraphIndex);
+                          setTab("full");
+                        }}
+                      >
+                        앞뒤 맥락·전체 글 보기
                       </button>
                     )}
                     {item.eventSeq && (
@@ -890,6 +946,18 @@ function ReviewPanel({
               )}
             </>
           )}
+          {tab === "evidence" && (
+            <>
+              <EvidencePanel axes={axes} />
+              <section className="panel">
+                <h3>학생이 첨부한 노력 자료</h3>
+                <EffortAttachments effort={s.effort} />
+                {!s.effort?.attachments.length && (
+                  <p className="muted">첨부자료가 없습니다.</p>
+                )}
+              </section>
+            </>
+          )}
           {tab === "full" && (
             <section className="panel">
               <h2>{s.title}</h2>
@@ -897,6 +965,34 @@ function ReviewPanel({
                 무슨 생각을 전하려는지, 근거가 그 생각을 어떻게 뒷받침하는지
                 읽어주세요. 과정 기록만으로 글의 수준을 판단하지 않습니다.
               </p>
+              {contextParagraph !== undefined && (
+                <div className="passage-context">
+                  <h3>선택한 대목의 앞뒤 맥락</h3>
+                  {textOf(s.doc)
+                    .split("\n")
+                    .filter((p) => p.trim())
+                    .slice(
+                      Math.max(0, contextParagraph - 1),
+                      contextParagraph + 2,
+                    )
+                    .map((p, i) => (
+                      <p key={i}>
+                        {i + Math.max(0, contextParagraph - 1) ===
+                        contextParagraph ? (
+                          <mark>{p}</mark>
+                        ) : (
+                          p
+                        )}
+                      </p>
+                    ))}
+                  <button
+                    className="subtle"
+                    onClick={() => setContextParagraph(undefined)}
+                  >
+                    맥락 접기
+                  </button>
+                </div>
+              )}
               <RichDocument doc={s.doc} />
               {s.pick && (
                 <div className="student-why">
@@ -1134,53 +1230,6 @@ function ReviewPanel({
               메모·음성 입력·보조기기·오프라인 사고는 충분히 기록되지 않을 수
               있습니다.
             </p>
-            <section className="score-card">
-              <p className="overline">PROCESS EVIDENCE · PILOT</p>
-              <div className="score-large">
-                {score.total}
-                <span>/ 100</span>
-              </div>
-              <h3>{score.label}</h3>
-              <p>
-                현재 기록에 남은 작성과정
-                <br />
-                증거의 충분성입니다.
-              </p>
-              <div className="score-breakdown">
-                {[
-                  ["생각의 흔적", score.thoughtTrace, 30],
-                  ["My Proof · 연구 시범", score.myProof, 25],
-                  ["입력 기록", score.inputEvidence, 20],
-                  ["수정 과정", score.revisionEvidence, 15],
-                  ["과정의 연결", score.processContinuity, 10],
-                ].map(([label, value, max]) => (
-                  <div key={String(label)}>
-                    <span>{label}</span>
-                    <b>{value === null ? "해당 없음" : `${value}/${max}`}</b>
-                  </div>
-                ))}
-              </div>
-              {score.myProof === null && (
-                <small>
-                  리듬 미수집·표본 부족: 나머지 75점 만점을 100점으로
-                  환산했습니다. 미참여로 감점하지 않습니다.
-                </small>
-              )}
-              <details>
-                <summary>점수의 의미와 확인할 사실</summary>
-                <p>{score.caveat}</p>
-                <ul>
-                  <li>문서 버전 {summary.snapshotCount}개</li>
-                  <li>수정 기록 {summary.revisionCount}회</li>
-                  <li>외부 텍스트 삽입 {summary.pasteChars}자</li>
-                  <li>활동 구간 추정 {minutes(summary.activeMs)}</li>
-                </ul>
-                <p>
-                  적은 수정·짧은 글은 낮게 표시될 수 있습니다. 키보드 변경·입력
-                  장치·한글 입력에 따라 리듬 신호가 달라질 수 있습니다.
-                </p>
-              </details>
-            </section>
             <section className="panel compact">
               <h3>관찰된 기록</h3>
               <dl className="facts">

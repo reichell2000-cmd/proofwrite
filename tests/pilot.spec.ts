@@ -76,7 +76,8 @@ test("teacher → student → rich edits and IME → reload → submit → manda
   ).toBeVisible();
   await student.getByLabel("선생님이 알아볼 이름 또는 별명").fill("3반 12번");
   await student.getByLabel("작성과정 기록 안내를 읽었어요.").check();
-  await student.getByRole("button", { name: "글쓰기 시작 · 이어쓰기" }).click();
+  await student.getByRole("button", { name: "과제 확인 · 참여하기" }).click();
+  await student.getByRole("link", { name: "글쓰기 시작 · 이어쓰기" }).click();
   const body = student.getByRole("textbox", { name: "과제 본문" });
   await expect(body).toBeVisible();
   await expect(
@@ -148,6 +149,9 @@ test("teacher → student → rich edits and IME → reload → submit → manda
       );
     })
     .toBe(true);
+  await student
+    .getByLabel("무엇을 해보았나요?")
+    .fill("경험을 근거로 연결하기 위해 글을 다시 읽고 고쳤어요.");
   await student.getByRole("button", { name: "제출 준비" }).click();
   await student.getByRole("button", { name: "제출하기", exact: true }).click();
   await expect(
@@ -440,7 +444,8 @@ test("offline edits, rich structures, undo/redo and tab isolation survive synchr
   await page.goto(`/join/${a.assignment.id}?code=${a.assignment.joinCode}`);
   await page.getByLabel("선생님이 알아볼 이름 또는 별명").fill("구조 시험");
   await page.getByLabel("작성과정 기록 안내를 읽었어요.").check();
-  await page.getByRole("button", { name: "글쓰기 시작 · 이어쓰기" }).click();
+  await page.getByRole("button", { name: "과제 확인 · 참여하기" }).click();
+  await page.getByRole("link", { name: "글쓰기 시작 · 이어쓰기" }).click();
   const body = page.getByRole("textbox", { name: "과제 본문" });
   await expect(body).toBeVisible();
   await page
@@ -464,7 +469,7 @@ test("offline edits, rich structures, undo/redo and tab isolation survive synchr
   await page.getByRole("button", { name: "행 추가", exact: true }).click();
   await expect(body.locator("table tr")).toHaveCount(4);
   // External image URLs never enter the document; uploaded raster images do.
-  await page.locator("input[type=file]").setInputFiles({
+  await page.locator("input[type=file][hidden]").setInputFiles({
     name: "pixel.png",
     mimeType: "image/png",
     buffer: Buffer.from(

@@ -1,3 +1,7 @@
+# Legacy Proof Score v0.1 (retired from UI)
+
+2026-09-27: ProofMe now presents five observable evidence axes. The old score module remains only for backwards reference and tests; no live UI calls it. Current behavior is documented in [PROOFME.md](PROOFME.md).
+
 # Proof Score v0.1 — revised Pilot hypothesis
 
 Purpose: expose the sufficiency of **recorded process evidence**, with dimensions and facts. Never authorship, AI-use, plagiarism or misconduct probability.

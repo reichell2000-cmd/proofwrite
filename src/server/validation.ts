@@ -3,6 +3,20 @@ import { HttpError } from "./store";
 export const assignmentSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().max(6000),
+  dueAt: z.number().int().positive().nullable().optional(),
+  contentPriorities: z
+    .array(
+      z.enum([
+        "argument",
+        "perspective",
+        "interpretation",
+        "logic",
+        "application",
+      ]),
+    )
+    .min(1)
+    .max(5)
+    .optional(),
   learningGoal: z.string().trim().max(600).default(""),
   successCriteria: z
     .array(z.string().trim().min(1).max(250))
@@ -67,11 +81,37 @@ const snapshot = z
 const rhythm = z
   .object({
     at: z.number().finite(),
+    mode: z.enum(["direct", "composition"]).optional(),
     dwellMs: z.number().finite().min(0).max(60000).optional(),
     flightMs: z.number().finite().min(0).max(86400000).optional(),
     burstLength: z.number().int().min(1).max(100000).optional(),
     pauseBeforeMs: z.number().finite().min(0).max(86400000).optional(),
     correctionLatencyMs: z.number().finite().min(0).max(86400000).optional(),
+  })
+  .strict();
+const effortSchema = z
+  .object({
+    difficulty: z.string().max(2000),
+    attempt: z.string().max(3000),
+    outcome: z.string().max(2000),
+    attachments: z
+      .array(
+        z
+          .object({
+            id: z.string().uuid(),
+            name: z.string().min(1).max(180),
+            mime: z.enum([
+              "application/pdf",
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+            ]),
+            size: z.number().int().positive().max(524288),
+            data: z.string().max(700000),
+          })
+          .strict(),
+      )
+      .max(3),
   })
   .strict();
 export const syncSchema = z
@@ -83,6 +123,7 @@ export const syncSchema = z
     rhythmOptIn: z.boolean(),
     title: z.string().trim().max(160),
     sources: z.string().max(6000),
+    effort: effortSchema.optional(),
     pick: z
       .object({
         text: z.string().min(1).max(1500),
