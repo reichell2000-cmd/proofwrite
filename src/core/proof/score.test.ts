@@ -50,7 +50,7 @@ describe("Proof Score ethics and boundaries", () => {
     );
   });
   it("is bounded and sums the displayed components when rhythm is available", () => {
-    for (const rhythm of [0, 0.5, 1, 999, NaN]) {
+    for (const rhythm of [0, 0.5, 1, 999]) {
       const score = calculateProofScore(base, rhythm);
       expect(score.total).toBeGreaterThanOrEqual(0);
       expect(score.total).toBeLessThanOrEqual(100);
@@ -62,5 +62,8 @@ describe("Proof Score ethics and boundaries", () => {
           score.processContinuity,
       );
     }
+  });
+  it("excludes non-finite rhythm rather than inventing a zero", () => {
+    expect(calculateProofScore(base, NaN)).toEqual(calculateProofScore(base));
   });
 });

@@ -1,11 +1,8 @@
 import type { Assignment, Submission } from "../model";
 import { hasEffort } from "../model";
 import { summarizeEvidence } from "../evidence/summarize";
-import {
-  buildRhythmProfile,
-  rhythmContinuity,
-  comparableRhythm,
-} from "../my-proof/rhythm";
+import { buildRhythmProfile } from "../my-proof/rhythm";
+import { observeRhythm } from "../my-proof/observation";
 export interface EvidenceAxis {
   id: string;
   title: string;
@@ -71,19 +68,8 @@ export function fiveEvidence(
       new Date(e.at).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }),
     ),
   );
-  const { samples, mode } = comparableRhythm(s.rhythm);
-  const midpoint = Math.floor(samples.length / 2);
-  const before = buildRhythmProfile(samples.slice(0, midpoint));
-  const after = buildRhythmProfile(samples.slice(midpoint));
-  const baseline =
-    (s.rhythmBaseline?.mode || "direct") === mode
-      ? s.rhythmBaseline?.profile
-      : undefined;
-  const continuity = s.rhythmOptIn
-    ? baseline && samples.length >= 80
-      ? rhythmContinuity(baseline, buildRhythmProfile(samples))
-      : rhythmContinuity(before, after)
-    : null;
+  const { samples, mode, before, after, baseline, continuity } =
+    observeRhythm(s);
   const effort = s.effort,
     first = writing[0]?.at,
     last = writing.at(-1)?.at,

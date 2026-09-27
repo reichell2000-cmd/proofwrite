@@ -4,6 +4,7 @@ import { handler, body, reviewSchema } from "../../../../../server/validation";
 import { buildReadingGuide } from "../../../../../core/teacher/reading-guide";
 import type { Assignment, Submission } from "../../../../../core/model";
 import { textOf } from "../../../../../core/evidence/replay";
+import { readingProgress } from "../../../../../core/teacher/review-progress";
 export const runtime = "nodejs";
 export async function POST(
   req: Request,
@@ -28,15 +29,9 @@ export async function POST(
         current.pick?.text,
         { doc: current.doc, priorities: assignment.contentPriorities },
       );
-      const ids = new Set(guide.map((g) => g.id));
-      const passages = [...new Set(review.passages)].filter((p) => ids.has(p));
-      if (
-        review.completed &&
-        !(
-          review.fullRead ||
-          (!assignment.fullRead && passages.length >= assignment.minRead)
-        )
-      )
+      const progress = readingProgress(assignment, review, guide);
+      const passages = progress.passages;
+      if (review.completed && !progress.fulfilled)
         throw new HttpError(
           400,
           "설정된 최소 대목을 읽고 확인해주세요. 대목이 적으면 전체 글을 읽어주세요.",

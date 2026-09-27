@@ -27,7 +27,7 @@ export function calculateProofScore(
     : 0;
   // Missing / opted-out rhythm is N/A, never fabricated points or an accessibility penalty.
   const myProof =
-    !hasWork || rhythmContinuity === null
+    !hasWork || rhythmContinuity === null || !Number.isFinite(rhythmContinuity)
       ? null
       : bounded(rhythmContinuity * 25, 25);
   // Evidence exists for paste as well; no paste-size or window-exit penalties.
@@ -72,6 +72,6 @@ export function calculateProofScore(
           ? "확인 권장"
           : "과정 확인 필요",
     caveat:
-      "Proof Score는 본인 작성 확률이나 부정행위 확률이 아닙니다. 기록된 작성과정 증거의 충분성을 요약합니다. 가중치와 기준은 Pilot 검증 전 가설입니다.",
+      "기록된 작성과정의 충분성을 요약한 시범 점수입니다. 글의 수준·성적·본인 작성 확률을 뜻하지 않습니다. 가중치와 구간 기준은 현장 검증 전 가설입니다.",
   };
 }

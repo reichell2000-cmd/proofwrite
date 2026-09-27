@@ -790,6 +790,130 @@ td .student-link {
   margin-left: 3px;
   font-weight: 400;
 }
+.roster-heading {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.roster-heading .actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.roster-heading input[type="search"] {
+  width: 185px;
+  margin: 0;
+}
+.roster-score {
+  min-width: 132px;
+}
+.roster-score strong {
+  display: block;
+  font-size: 22px;
+  font-weight: 500;
+}
+.roster-score strong small {
+  display: inline;
+  margin-left: 5px;
+  font-weight: 400;
+}
+.roster-score > span {
+  font-size: 11px;
+}
+.roster-score > small {
+  color: var(--muted);
+}
+.review-progress {
+  padding: 12px;
+  margin: 12px 0;
+  background: #f3f5ee;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.review-progress p {
+  margin: 5px 0;
+  font-size: 12px;
+}
+.review-progress .subtle {
+  padding: 6px 0;
+  font-size: 12px;
+}
+.feedback-quote-error {
+  color: #985136;
+}
+.next-review {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+.next-review button {
+  flex-wrap: wrap;
+}
+.next-review button small {
+  flex-basis: 100%;
+}
+.process-score-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.process-score-heading h2 {
+  font-size: 21px;
+}
+.process-score .score-large {
+  flex-shrink: 0;
+}
+.score-formula {
+  padding: 14px 16px;
+  background: #f3f5ee;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-variant-numeric: tabular-nums;
+}
+.score-formula p {
+  font-size: 12px;
+  margin: 7px 0 0;
+}
+.process-score-parts {
+  margin: 16px 0;
+}
+.process-score-parts > div {
+  border-top: 1px solid var(--line);
+  padding: 13px 0;
+}
+.process-score-parts dt {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 500;
+}
+.process-score-parts dd {
+  margin: 0;
+}
+.process-score-parts p {
+  font-size: 13px;
+  margin: 6px 0;
+}
+.process-score-parts small {
+  color: var(--muted);
+  line-height: 1.7;
+  display: block;
+}
+@media (max-width: 640px) {
+  .roster-heading .actions {
+    width: 100%;
+  }
+  .roster-heading input[type="search"] {
+    width: 100%;
+  }
+  .roster-heading select {
+    flex: 1;
+    min-width: 0;
+  }
+  .process-score-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
 .read-hint {
   display: flex;
   align-items: center;

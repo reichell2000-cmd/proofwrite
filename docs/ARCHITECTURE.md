@@ -9,7 +9,7 @@ No LLM client, API key, analytics tracker, external font or AI detector. No syst
 ## Writing pipeline
 
 1. Editor document transactions emit ordered ProseMirror steps and a plain-text delta.
-2. Korean composition transactions are grouped through compositionend. Raw intermediate composition strings are not separately scored. Editor-only optional rhythm collection excludes composition and repeated keys.
+2. Korean composition transactions are grouped through compositionend. Raw intermediate composition strings are not separately scored. Editor-only optional rhythm collection separates direct and composition input modes and excludes repeated keys.
 3. Empty start, large changes, manual save, 45-second dirty interval/50-event threshold and submission create checkpoints; ordinary keystrokes store steps rather than full documents.
 4. Current document + pending events are copied to IndexedDB approximately once per second while dirty. Server receives batches on a four-second interval, explicit save, reconnect and visibility change.
 5. Server validates a 500-event client batch with Zod, revision/sequence checks, ProseMirror replay, text-delta/count equality and snapshot equality. It atomically replaces a submission file under a process-wide write mutex.
@@ -36,7 +36,7 @@ Client-originated events cannot establish identity, honest event reporting, or t
 
 ## Feedback and follow-up learning
 
-Assignments optionally include a learning goal and up to four content criteria. Old records without these fields remain readable. The roster omits numeric scores; the review opens on full text with process scores inside a closed disclosure.
+Assignments optionally include a learning goal and up to four content criteria. Old records without these fields remain readable. The teacher roster includes the process score with its denominator scope. Review opens on full text; the evidence tab contains the score with a closed calculation disclosure and all five evidence axes. The reading-progress helper is shared by the roster API, review UI and review API.
 
 Teacher review completion requires the reading acknowledgement, a quote present in the final document, a specific strength and a next revision. An optional question and reaction accompany the feedback. Incomplete reviews are stripped from student GET responses. Updating a completed review as a draft hides it until it is sent again.
 

@@ -38,14 +38,20 @@ import { DEFAULT_PRIORITIES, type ContentPriority } from "../core/model";
 import { summarizeEvidence } from "../core/evidence/summarize";
 import { textOf, externalTransformation } from "../core/evidence/replay";
 import { buildReadingGuide } from "../core/teacher/reading-guide";
+import { readingProgress } from "../core/teacher/review-progress";
+import type { ProofScoreBreakdown } from "../core/proof/score";
+import { ProcessScore } from "./ProcessScore";
 type Row = {
   id: string;
   alias: string;
   title: string;
   status: string;
   updatedAt: number;
+  submittedAt?: number;
   review: Review;
   hasPick: boolean;
+  score: ProofScoreBreakdown | null;
+  reading: ReturnType<typeof readingProgress>;
 };
 export default function Teacher() {
   const [logged, setLogged] = useState<boolean | null>(null);
@@ -59,6 +65,8 @@ export default function Teacher() {
   const [selected, setSelected] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("recent");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [learningGoal, setLearningGoal] = useState("");
@@ -180,11 +188,27 @@ export default function Teacher() {
         </main>
       </>
     );
-  const filtered = rows.filter(
-    (r) =>
-      filter === "all" ||
-      (filter === "submitted" && r.status === "submitted") ||
-      (filter === "unread" && r.status === "submitted" && !r.review.completed),
+  const filtered = rows
+    .filter(
+      (r) =>
+        (filter === "all" ||
+          (filter === "submitted" && r.status === "submitted") ||
+          (filter === "unread" &&
+            r.status === "submitted" &&
+            !r.review.completed) ||
+          (filter === "reviewed" && r.review.completed)) &&
+        `${r.alias} ${r.title}`
+          .toLocaleLowerCase()
+          .includes(search.trim().toLocaleLowerCase()),
+    )
+    .sort((a, b) =>
+      sort === "name"
+        ? a.alias.localeCompare(b.alias, "ko")
+        : (b.submittedAt ?? b.updatedAt) - (a.submittedAt ?? a.updatedAt) ||
+          a.id.localeCompare(b.id),
+    );
+  const nextUnread = rows.find(
+    (r) => r.id !== selected && r.status === "submitted" && !r.review.completed,
   );
   return (
     <>
@@ -243,9 +267,17 @@ export default function Teacher() {
           {error && <Notice error>{error}</Notice>}
           {selected && active ? (
             <ReviewPanel
+              key={selected}
               id={selected}
               assignment={active}
               onBack={() => void open(active)}
+              onReviewed={(review) =>
+                setRows((old) =>
+                  old.map((r) => (r.id === selected ? { ...r, review } : r)),
+                )
+              }
+              nextAlias={nextUnread?.alias}
+              onNext={nextUnread ? () => setSelected(nextUnread.id) : undefined}
             />
           ) : (
             <>
@@ -346,9 +378,16 @@ export default function Teacher() {
                       </strong>
                     </div>
                   </div>
-                  <div className="section-heading">
+                  <div className="section-heading roster-heading">
                     <h2>학생의 글과 생각</h2>
                     <div className="actions">
+                      <input
+                        type="search"
+                        aria-label="학생·글 제목 검색"
+                        placeholder="학생·글 제목 검색"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
                       <select
                         aria-label="제출 필터"
                         value={filter}
@@ -357,6 +396,15 @@ export default function Teacher() {
                         <option value="all">모든 학생</option>
                         <option value="submitted">제출 완료</option>
                         <option value="unread">읽기 대기</option>
+                        <option value="reviewed">피드백 완료</option>
+                      </select>
+                      <select
+                        aria-label="학생 목록 정렬"
+                        value={sort}
+                        onChange={(e) => setSort(e.target.value)}
+                      >
+                        <option value="recent">최근 제출·작성순</option>
+                        <option value="name">이름순</option>
                       </select>
                       <button
                         className="subtle"
@@ -373,6 +421,7 @@ export default function Teacher() {
                         <tr>
                           <th>학생 · 글 제목</th>
                           <th>작성 상태</th>
+                          <th>과정기록 종합점수</th>
                           <th>피드백</th>
                           <th>읽기 안내</th>
                           <th>교사 확인</th>
@@ -406,6 +455,24 @@ export default function Teacher() {
                               <small>{time(r.updatedAt)}</small>
                             </td>
                             <td>
+                              {r.score ? (
+                                <div className="roster-score">
+                                  <strong>
+                                    {r.score.total}
+                                    <small>/ 100</small>
+                                  </strong>
+                                  <span>{r.score.label}</span>
+                                  <small>
+                                    {r.score.availableMax === 75
+                                      ? "리듬 제외 · 75점 환산"
+                                      : "리듬 포함 · 100점 기준"}
+                                  </small>
+                                </div>
+                              ) : (
+                                <span className="muted">제출 후 표시</span>
+                              )}
+                            </td>
+                            <td>
                               <span className="muted">
                                 {r.review.completed
                                   ? "피드백 전달됨"
@@ -415,14 +482,21 @@ export default function Teacher() {
                               </span>
                             </td>
                             <td>
-                              {r.hasPick ? (
+                              {r.hasPick && (
                                 <span className="read-hint">
                                   <Star size={14} />
                                   학생이 고른 대목
                                 </span>
-                              ) : (
-                                <span className="muted">대목 선택 대기</span>
                               )}
+                              <small>
+                                {r.review.completed
+                                  ? "읽기·피드백 완료"
+                                  : r.reading.fulfilled
+                                    ? "읽기 완료 · 피드백 작성"
+                                    : r.reading.fullReadRequired
+                                      ? "전체 글 읽기"
+                                      : `${r.reading.read}/${r.reading.required}대목 확인`}
+                              </small>
                             </td>
                             <td>
                               {r.review.completed ? (
@@ -462,8 +536,9 @@ export default function Teacher() {
                     )}
                   </div>
                   <p className="fine-print">
-                    학생의 내용과 다섯 가지 과정 증거를 함께 살펴보세요. 자동
-                    기록과 학생이 제공한 노력 근거를 구분해 보여드립니다.
+                    종합점수는 기록된 과정의 충분성을 요약한 시범 지표입니다.
+                    학생의 글과 다섯 가지 증거를 함께 읽어주세요. 리듬 포함
+                    여부가 다른 점수는 단순 비교하지 않습니다.
                   </p>
                 </>
               ) : (
@@ -671,10 +746,16 @@ function ReviewPanel({
   id,
   assignment,
   onBack,
+  onReviewed,
+  nextAlias,
+  onNext,
 }: {
   id: string;
   assignment: Assignment;
   onBack: () => void;
+  onReviewed: (review: Review) => void;
+  nextAlias?: string;
+  onNext?: () => void;
 }) {
   const [s, setS] = useState<Submission | null>(null);
   const [error, setError] = useState("");
@@ -729,6 +810,7 @@ function ReviewPanel({
   const feedback = review.feedback || EMPTY_FEEDBACK;
   const feedbackReady = !!(
     feedback.quote.trim() &&
+    textOf(s.doc).includes(feedback.quote.trim()) &&
     feedback.strength.trim() &&
     feedback.nextStep.trim()
   );
@@ -740,11 +822,8 @@ function ReviewPanel({
       feedback: { ...feedback, [field]: value },
     });
   };
-  const fulfilled =
-    review.fullRead ||
-    (!assignment.fullRead &&
-      review.passages.filter((id) => guide.some((item) => item.id === id))
-        .length >= assignment.minRead);
+  const progress = readingProgress(assignment, review, guide);
+  const fulfilled = progress.fulfilled;
   const jump = (seq: number) => {
     setTarget(seq);
     setTab("replay");
@@ -766,6 +845,8 @@ function ReviewPanel({
         },
       );
       setReview(result.review);
+      setS((old) => (old ? { ...old, review: result.review } : old));
+      onReviewed(result.review);
       setSaved(true);
       setError("");
     } catch (e) {
@@ -948,6 +1029,7 @@ function ReviewPanel({
           )}
           {tab === "evidence" && (
             <>
+              <ProcessScore submission={s} />
               <EvidencePanel axes={axes} />
               <section className="panel">
                 <h3>학생이 첨부한 노력 자료</h3>
@@ -1109,16 +1191,43 @@ function ReviewPanel({
         </section>
         <aside className="review-aside">
           <section className="panel compact human-check">
+            <p className="overline">읽기 → 피드백 → 다음 학생</p>
             <h3>읽은 대목에 피드백 남기기</h3>
             <p>
               {assignment.fullRead
                 ? "전체 글 읽기"
                 : `최소 ${assignment.minRead}대목 읽기`}{" "}
-              ·{" "}
-              {review.fullRead
-                ? "전체 글 확인"
-                : `${review.passages.length}대목 확인`}
+              · {review.fullRead ? "전체 글 확인" : `${progress.read}대목 확인`}
             </p>
+            <div className="review-progress" aria-label="피드백 전달 준비">
+              <p>
+                {fulfilled
+                  ? "✓ 읽기 확인 완료"
+                  : progress.fullReadRequired
+                    ? "전체 글을 읽고 확인해주세요."
+                    : `읽기 확인까지 ${progress.remaining}대목 남았어요.`}
+              </p>
+              <p>
+                {feedbackReady
+                  ? "✓ 본문 인용·잘된 점·다음 수정 준비됨"
+                  : "본문 인용·잘된 점·다음 수정이 필요해요."}
+              </p>
+              {!fulfilled && (
+                <button
+                  className="subtle"
+                  onClick={() =>
+                    setTab(progress.fullReadRequired ? "full" : "guide")
+                  }
+                >
+                  {progress.fullReadRequired
+                    ? "전체 글 읽으러 가기"
+                    : "읽을 대목 보기"}
+                </button>
+              )}
+              <button className="subtle" onClick={() => setTab("evidence")}>
+                종합점수·다섯 증거 보기
+              </button>
+            </div>
             <p className="fine-print">
               대목이 적으면 ‘전체 글’에서 읽기 확인을 할 수 있습니다.
             </p>
@@ -1135,6 +1244,12 @@ function ReviewPanel({
                 onChange={(e) => updateFeedback("quote", e.target.value)}
                 placeholder="제출된 본문에서 문장이나 대목을 그대로 옮겨주세요."
               />
+              {feedback.quote.trim() &&
+                !textOf(s.doc).includes(feedback.quote.trim()) && (
+                  <small className="feedback-quote-error">
+                    본문에 있는 표현을 그대로 가져와주세요.
+                  </small>
+                )}
             </label>
             <label>
               잘된 점과 그 이유
@@ -1222,6 +1337,20 @@ function ReviewPanel({
             >
               중간 저장
             </button>
+            {review.completed && (
+              <div className="next-review">
+                {onNext ? (
+                  <button className="outline wide" onClick={onNext}>
+                    다음 읽기 대기 학생 <ArrowRight size={16} />
+                    <small>{nextAlias}</small>
+                  </button>
+                ) : (
+                  <p className="green-text">
+                    이 과제의 제출된 글을 모두 확인했어요.
+                  </p>
+                )}
+              </div>
+            )}
           </section>
           <details className="process-details">
             <summary>작성과정 보조 지표 펼치기</summary>

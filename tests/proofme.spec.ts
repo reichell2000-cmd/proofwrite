@@ -62,13 +62,11 @@ test("ProofMe task overview, effort attachment, bottom submit, dashboard and tea
     .getByLabel("무엇을 해보았나요?")
     .fill("발표 사례를 찾아 비교한 뒤, 결과만 중요하다는 주장을 고쳤어요.");
   const pdf = Buffer.from("%PDF-1.4\n% fictional effort note\n%%EOF");
-  await student
-    .getByLabel("노력 자료 첨부")
-    .setInputFiles({
-      name: "노력-메모.pdf",
-      mimeType: "application/pdf",
-      buffer: pdf,
-    });
+  await student.getByLabel("노력 자료 첨부").setInputFiles({
+    name: "노력-메모.pdf",
+    mimeType: "application/pdf",
+    buffer: pdf,
+  });
   await expect(
     student.getByRole("link", { name: "노력-메모.pdf" }),
   ).toBeVisible();
@@ -138,13 +136,74 @@ test("ProofMe task overview, effort attachment, bottom submit, dashboard and tea
       )
     ).status(),
   ).toBe(401);
+  // A second submitted student exercises the saved-review → next-student flow.
+  const second = await browser.newContext();
+  const secondPage = await second.newPage();
+  const joined = await (
+    await second.request.post(`${origin}/api/join/${assignment.id}`, {
+      headers: { origin },
+      data: { code: assignment.joinCode, alias: "다음 학생", consent: true },
+    })
+  ).json();
+  await secondPage.goto(`/write/${joined.id}`);
+  await secondPage
+    .getByLabel("글 제목", { exact: true })
+    .fill("다음 학생의 글");
+  await secondPage
+    .getByLabel("과제 본문", { exact: true })
+    .fill("나는 시도할 때마다 배우는 것이 있다고 생각한다.");
+  await secondPage
+    .getByLabel("무엇을 해보았나요?")
+    .fill("첫 문장을 두 번 다시 써보았습니다.");
+  await secondPage
+    .getByRole("button", { name: "제출 확인하기", exact: true })
+    .click();
+  await secondPage
+    .getByRole("button", { name: "제출하기", exact: true })
+    .click();
+  await expect(
+    secondPage.getByRole("heading", { name: "생각과 과정을 함께 전했어요." }),
+  ).toBeVisible();
+  const roster = await (
+    await page.request.get(`/api/assignments/${assignment.id}`)
+  ).json();
+  const row = roster.submissions.find((r: { id: string }) => r.id === id);
+  expect(row.score.total).toBeGreaterThan(0);
+  expect(row.score.availableMax).toBe(75);
+  expect(row.reading.fulfilled).toBe(false);
   await page.goto("/teacher");
+  await expect(
+    page.getByRole("columnheader", { name: "과정기록 종합점수" }),
+  ).toBeVisible();
+  await page.getByLabel("학생·글 제목 검색").fill("ProofMe 시험 학생");
+  await expect(
+    page.getByRole("button", { name: "다음 학생", exact: true }),
+  ).not.toBeVisible();
+  await page.getByLabel("학생 목록 정렬").selectOption("name");
+  await page.screenshot({
+    path: "test-results/proofme-score-roster.png",
+    fullPage: true,
+  });
   await page
     .getByRole("button", { name: "ProofMe 시험 학생", exact: true })
     .click();
+  await expect(page.locator(".score-large")).not.toBeVisible();
   await page
     .getByRole("button", { name: "다섯 가지 증거", exact: true })
     .click();
+  const scorePanel = page.getByRole("region", { name: "과정기록 종합점수" });
+  await expect(scorePanel.locator(".score-large")).toContainText(
+    String(row.score.total),
+  );
+  await scorePanel
+    .getByText("점수의 근거와 계산 펼치기", { exact: true })
+    .click();
+  await expect(
+    scorePanel.getByText("리듬 항목은 해당 없음입니다.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    scorePanel.getByText("입력 습관 비교", { exact: false }),
+  ).toBeVisible();
   for (const title of [
     "생각의 증거",
     "집중의 증거",
@@ -171,6 +230,54 @@ test("ProofMe task overview, effort attachment, bottom submit, dashboard and tea
   await expect(
     page.getByRole("heading", { name: "선택한 대목의 앞뒤 맥락" }),
   ).toBeVisible();
+  const complete = page.getByRole("button", {
+    name: "피드백 전달",
+    exact: true,
+  });
+  await page.getByLabel("함께 볼 대목").fill("본문에 없는 인용");
+  await page
+    .getByLabel("잘된 점과 그 이유")
+    .fill("결과와 과정을 비교해서 관점의 변화가 드러납니다.");
+  await page
+    .getByLabel("다음에 해볼 수정 한 가지")
+    .fill("친구를 도왔던 구체적인 장면을 더해보세요.");
+  await page.getByLabel("전체 글을 읽었어요").check();
+  await expect(complete).toBeDisabled();
+  await expect(
+    page.getByText("본문에 있는 표현을 그대로 가져와주세요."),
+  ).toBeVisible();
+  await page
+    .getByLabel("함께 볼 대목")
+    .fill("처음에는 결과만 중요하다고 생각했다.");
+  await complete.click();
+  await expect(page.getByText("피드백을 학생에게 전했습니다.")).toBeVisible();
+  await page.getByRole("button", { name: /다음 읽기 대기 학생/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "다음 학생의 글", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByLabel("함께 볼 대목")).toHaveValue("");
+  await expect(page.getByLabel("전체 글을 읽었어요")).not.toBeChecked();
+  await expect(complete).toBeDisabled();
+  await page.getByRole("button", { name: "학생 목록", exact: true }).click();
+  await page.getByLabel("학생·글 제목 검색").fill("");
+  await page.getByLabel("제출 필터").selectOption("reviewed");
+  await expect(
+    page.getByRole("button", { name: "ProofMe 시험 학생", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "다음 학생", exact: true }),
+  ).not.toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/proofme-score-roster-mobile.png",
+    fullPage: true,
+  });
+  await second.close();
   await context.close();
   await anonymous.close();
 });
