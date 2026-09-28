@@ -3,6 +3,7 @@ import type {
   RhythmSample,
   WritingSnapshot,
 } from "./evidence/types";
+import type { AssessmentPlan, Evaluation } from "./assessment";
 export type Doc = Record<string, unknown>;
 export const EMPTY_DOC: Doc = { type: "doc", content: [{ type: "paragraph" }] };
 export const POLICIES = {
@@ -53,6 +54,8 @@ export const EMPTY_EFFORT: EffortEvidence = {
 export const hasEffort = (effort?: EffortEvidence) =>
   !!(effort?.attempt.trim() || effort?.attachments.length);
 export interface Assignment {
+  assessment?: AssessmentPlan;
+  publishedAt?: number;
   id: string;
   title: string;
   description: string;
@@ -74,6 +77,7 @@ export interface StudentPick {
   to: number;
 }
 export interface Review {
+  assessment?: Evaluation;
   passages: string[];
   fullRead: boolean;
   reaction: string;
@@ -101,6 +105,7 @@ export interface LearningResponse {
   updatedAt: number;
 }
 export interface Submission {
+  assessment?: AssessmentPlan;
   rhythmBaseline?: {
     mode?: "direct" | "composition";
     profile: import("./my-proof/rhythm").RhythmProfile;
@@ -113,6 +118,7 @@ export interface Submission {
   title: string;
   sources: string;
   effort?: EffortEvidence;
+  attachments?: EffortAttachment[];
   doc: Doc;
   events: EvidenceEvent[];
   snapshots: WritingSnapshot[];
@@ -137,6 +143,7 @@ export interface SyncBody {
   title: string;
   sources: string;
   effort?: EffortEvidence;
+  attachments?: EffortAttachment[];
   pick: StudentPick | null;
   reflections: string[];
   submit: boolean;

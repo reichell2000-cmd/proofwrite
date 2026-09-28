@@ -22,6 +22,7 @@ export const POST = handler(async (req) => {
     id: randomUUID(),
     joinCode: randomBytes(18).toString("hex"),
     createdAt: Date.now(),
+    ...(data.assessment ? { publishedAt: Date.now() } : {}),
   };
   await locked(() => write("assignments", assignment.id, assignment));
   return { assignment };

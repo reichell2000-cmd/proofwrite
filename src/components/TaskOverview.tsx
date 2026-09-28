@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { AssessmentSummary, AssignmentFormat } from "./Assessment";
+import { effortMode } from "../core/assessment";
 import { useEffect, useState } from "react";
 import { Header, Notice, time } from "./Shell";
 import { LearningFocus } from "./LearningFocus";
@@ -59,6 +61,12 @@ export default function TaskOverview({ id }: { id: string }) {
                 {data.assignment.description || "별도 안내가 없는 과제입니다."}
               </p>
               <LearningFocus assignment={data.assignment} />
+              <AssessmentSummary
+                plan={data.submission.assessment || data.assignment.assessment}
+              />
+              <AssignmentFormat
+                plan={data.submission.assessment || data.assignment.assessment}
+              />
               <p className="muted">
                 함께 읽을 내용 ·{" "}
                 {(data.assignment.contentPriorities || DEFAULT_PRIORITIES)
@@ -81,8 +89,12 @@ export default function TaskOverview({ id }: { id: string }) {
                 <span>작성과 수정 과정 자동 기록</span>
               </li>
               <li>
-                <b>2. 노력의 증거</b>
-                <span>해본 일 또는 자료 남기기</span>
+                <b>2. 자료·제출 확인</b>
+                <span>
+                  {effortMode(data.submission.assessment) === "score"
+                    ? "노력의 근거 함께 남기기"
+                    : "선택 자료와 출처 확인"}
+                </span>
               </li>
               <li>
                 <b>3. 제출 확인</b>
@@ -90,7 +102,13 @@ export default function TaskOverview({ id }: { id: string }) {
               </li>
             </ol>
             <EvidencePanel
-              axes={fiveEvidence(data.submission, data.assignment)}
+              axes={fiveEvidence(data.submission, data.assignment).filter(
+                (axis) =>
+                  !data.submission.assessment ||
+                  data.submission.assessment.criteria.some(
+                    (c) => c.id === `proof:${axis.id}` && c.mode !== "exclude",
+                  ),
+              )}
             />
           </>
         )}

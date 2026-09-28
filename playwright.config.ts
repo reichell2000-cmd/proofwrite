@@ -7,6 +7,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:3100",
     headless: true,
+    actionTimeout: 15000,
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
       args: ["--no-sandbox", "--disable-dev-shm-usage"],

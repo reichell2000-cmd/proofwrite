@@ -28,6 +28,7 @@ import {
   POLICIES,
   REFLECTIONS,
   EMPTY_FEEDBACK,
+  EMPTY_EFFORT,
   type TeacherFeedback,
 } from "../core/model";
 import { fiveEvidence } from "../core/proof/five-evidence";
@@ -41,6 +42,19 @@ import { buildReadingGuide } from "../core/teacher/reading-guide";
 import { readingProgress } from "../core/teacher/review-progress";
 import type { ProofScoreBreakdown } from "../core/proof/score";
 import { ProcessScore } from "./ProcessScore";
+import { ReviewDraft } from "./ReviewDraft";
+import {
+  AssessmentBuilder,
+  AssessmentSummary,
+  EvaluationEditor,
+} from "./Assessment";
+import {
+  recommendedPlan,
+  planError,
+  gradeError,
+  blankEvaluation,
+  CATEGORIES,
+} from "../core/assessment";
 type Row = {
   id: string;
   alias: string;
@@ -78,6 +92,17 @@ export default function Teacher() {
   const [minRead, setMinRead] = useState("2");
   const [questions, setQuestions] = useState<string[]>([]);
   const [custom, setCustom] = useState("");
+  const [assessment, setAssessment] = useState(() =>
+    recommendedPlan("argument"),
+  );
+  const [assessmentCustomized, setAssessmentCustomized] = useState(false);
+  useEffect(() => {
+    if (!assessmentCustomized)
+      setAssessment((old) => ({
+        ...recommendedPlan(old.category, learningGoal),
+        purpose: old.purpose,
+      }));
+  }, [learningGoal, assessment.category, assessmentCustomized]);
   async function load() {
     try {
       const result = await api<{ assignments: Assignment[] }>(
@@ -347,6 +372,7 @@ export default function Teacher() {
                       );
                     }}
                   />
+                  <AssessmentSummary plan={active.assessment} />
                   <div className="stat-grid">
                     <div>
                       <Users size={19} />
@@ -421,7 +447,11 @@ export default function Teacher() {
                         <tr>
                           <th>학생 · 글 제목</th>
                           <th>작성 상태</th>
-                          <th>과정기록 종합점수</th>
+                          <th>
+                            {active.assessment
+                              ? "교사 확정 평가"
+                              : "과정기록 종합점수"}
+                          </th>
                           <th>피드백</th>
                           <th>읽기 안내</th>
                           <th>교사 확인</th>
@@ -455,7 +485,17 @@ export default function Teacher() {
                               <small>{time(r.updatedAt)}</small>
                             </td>
                             <td>
-                              {r.score ? (
+                              {active.assessment ? (
+                                r.review.completed ? (
+                                  <strong>
+                                    {active.assessment.grading === "feedback"
+                                      ? "피드백 확정"
+                                      : `${r.review.assessment?.total ?? "—"} / 100`}
+                                  </strong>
+                                ) : (
+                                  <span className="muted">교사 평가 대기</span>
+                                )
+                              ) : r.score ? (
                                 <div className="roster-score">
                                   <strong>
                                     {r.score.total}
@@ -570,7 +610,10 @@ export default function Teacher() {
                   {
                     title,
                     description,
-                    learningGoal,
+                    learningGoal:
+                      learningGoal.trim() ||
+                      CATEGORIES[assessment.category].goal,
+                    assessment,
                     dueAt: due ? new Date(due).getTime() : null,
                     contentPriorities: priorities,
                     successCriteria: criteria
@@ -596,6 +639,8 @@ export default function Teacher() {
                 setDue("");
                 setPriorities(DEFAULT_PRIORITIES);
                 setCustom("");
+                setAssessment(recommendedPlan("argument"));
+                setAssessmentCustomized(false);
               } catch (e) {
                 setError((e as Error).message);
               } finally {
@@ -652,6 +697,14 @@ export default function Teacher() {
               학년과 글의 종류에 맞게 적어주세요. 분량·속도·수정 횟수보다 글에서
               배울 내용을 기준으로 삼아주세요.
             </p>
+            <AssessmentBuilder
+              value={assessment}
+              onChange={(plan) => {
+                setAssessmentCustomized(plan.category === assessment.category);
+                setAssessment(plan);
+              }}
+              goal={learningGoal}
+            />
             <label>
               제출 마감일 <small>(선택 · 이 기기의 시간대)</small>
               <input
@@ -731,7 +784,10 @@ export default function Teacher() {
               >
                 취소
               </button>
-              <button className="primary" disabled={busy || !priorities.length}>
+              <button
+                className="primary"
+                disabled={busy || !priorities.length || !!planError(assessment)}
+              >
                 {busy ? "만드는 중…" : "과제 만들기"}
                 <ArrowRight size={16} />
               </button>
@@ -786,7 +842,13 @@ function ReviewPanel({
       s
         ? {
             summary: summarizeEvidence(s.events),
-            axes: fiveEvidence(s, assignment),
+            axes: fiveEvidence(s, assignment).filter(
+              (axis) =>
+                !s.assessment ||
+                s.assessment.criteria.some(
+                  (c) => c.id === `proof:${axis.id}` && c.mode !== "exclude",
+                ),
+            ),
             guide: buildReadingGuide(s.events, s.snapshots, s.pick?.text, {
               doc: s.doc,
               priorities: assignment.contentPriorities,
@@ -807,6 +869,9 @@ function ReviewPanel({
       </>
     );
   const { summary, axes, guide, pastes } = derived;
+  const assessmentPlan = s.assessment || assignment.assessment;
+  const assessmentReady =
+    !assessmentPlan || !gradeError(assessmentPlan, review.assessment);
   const feedback = review.feedback || EMPTY_FEEDBACK;
   const feedbackReady = !!(
     feedback.quote.trim() &&
@@ -842,6 +907,18 @@ function ReviewPanel({
           reaction: review.reaction,
           feedback,
           completed,
+          ...(assessmentPlan
+            ? {
+                assessment: review.assessment
+                  ? {
+                      version: review.assessment.version,
+                      scores: review.assessment.scores,
+                      confirmed: review.assessment.confirmed,
+                    }
+                  : undefined,
+                baseReviewUpdatedAt: review.updatedAt,
+              }
+            : {}),
         },
       );
       setReview(result.review);
@@ -1029,11 +1106,14 @@ function ReviewPanel({
           )}
           {tab === "evidence" && (
             <>
-              <ProcessScore submission={s} />
+              {!assessmentPlan && <ProcessScore submission={s} />}
               <EvidencePanel axes={axes} />
               <section className="panel">
                 <h3>학생이 첨부한 노력 자료</h3>
                 <EffortAttachments effort={s.effort} />
+                <EffortAttachments
+                  effort={{ ...EMPTY_EFFORT, attachments: s.attachments || [] }}
+                />
                 {!s.effort?.attachments.length && (
                   <p className="muted">첨부자료가 없습니다.</p>
                 )}
@@ -1234,6 +1314,62 @@ function ReviewPanel({
             <p className="fine-print">
               이 학생의 표현을 짚고, 다음 시도 한 가지만 제안해주세요.
             </p>
+            {s.status === "submitted" && (
+              <ReviewDraft
+                id={s.id}
+                revision={s.revision}
+                labels={Object.fromEntries(
+                  (assessmentPlan?.criteria ?? []).map((c) => [c.id, c.label]),
+                )}
+                onRead={() => setTab("full")}
+                onApply={(draft) => {
+                  const evaluation = assessmentPlan
+                    ? (review.assessment ?? blankEvaluation(assessmentPlan))
+                    : undefined;
+                  setSaved(false);
+                  setReview({
+                    ...review,
+                    completed: false,
+                    feedback: {
+                      ...draft.feedback,
+                      strength: draft.feedback.strength || feedback.strength,
+                      nextStep: draft.feedback.nextStep || feedback.nextStep,
+                    },
+                    ...(evaluation
+                      ? {
+                          assessment: {
+                            ...evaluation,
+                            confirmed: false,
+                            scores: evaluation.scores.map((row) => {
+                              const proposal = draft.suggestions.find(
+                                (p) => p.id === row.id,
+                              );
+                              return proposal
+                                ? {
+                                    ...row,
+                                    value: proposal.value,
+                                    note: proposal.reason,
+                                  }
+                                : row;
+                            }),
+                          },
+                        }
+                      : {}),
+                  });
+                }}
+              />
+            )}
+            {assessmentPlan && (
+              <EvaluationEditor
+                plan={assessmentPlan}
+                value={review.assessment}
+                disabled={saving || s.status !== "submitted"}
+                onChange={(value) => {
+                  setSaved(false);
+                  setReview({ ...review, completed: false, assessment: value });
+                }}
+              />
+            )}
             <label>
               함께 볼 대목
               <textarea
@@ -1322,13 +1458,18 @@ function ReviewPanel({
               disabled={
                 !fulfilled ||
                 !feedbackReady ||
+                !assessmentReady ||
                 saving ||
                 s.status !== "submitted"
               }
               onClick={() => void save(true)}
             >
               <Check size={16} />
-              {saving ? "저장 중…" : "피드백 전달"}
+              {saving
+                ? "저장 중…"
+                : assessmentPlan
+                  ? "평가 확정·피드백 전달"
+                  : "피드백 전달"}
             </button>
             <button
               className="subtle wide"

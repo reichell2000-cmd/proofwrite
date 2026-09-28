@@ -3,6 +3,7 @@ import { schema } from "../core/editor/extensions";
 import { applyEvent, eventTextDelta, textOf } from "../core/evidence/replay";
 import { type Submission, type SyncBody, hasEffort } from "../core/model";
 import { HttpError } from "./store";
+import { effortMode, hasAssignmentContent } from "../core/assessment";
 export function validateDoc(doc: Record<string, unknown>) {
   const node = Node.fromJSON(schema, doc);
   node.check();
@@ -62,6 +63,9 @@ export function mergeSubmission(
       !fresh.length &&
       request.title === current.title &&
       request.sources === current.sources &&
+      (request.attachments === undefined ||
+        JSON.stringify(request.attachments) ===
+          JSON.stringify(current.attachments)) &&
       (request.effort === undefined ||
         JSON.stringify(request.effort) === JSON.stringify(current.effort)) &&
       JSON.stringify(request.pick) === JSON.stringify(current.pick) &&
@@ -142,11 +146,14 @@ export function mergeSubmission(
     );
   if (
     request.submit &&
-    (!request.title || !text.trim() || fresh.at(-1)?.type !== "submit")
+    (!request.title ||
+      !hasAssignmentContent(text, current.assessment) ||
+      fresh.at(-1)?.type !== "submit")
   )
     throw new HttpError(400, "제목과 본문을 확인해주세요.");
   const effort = request.effort ?? current.effort;
-  for (const file of effort?.attachments || []) {
+  const attachments = request.attachments ?? current.attachments;
+  for (const file of [...(effort?.attachments || []), ...(attachments || [])]) {
     const prefix = `data:${file.mime};base64,`;
     if (
       !file.data.startsWith(prefix) ||
@@ -166,7 +173,11 @@ export function mergeSubmission(
     if (bytes.length !== file.size || bytes.length > 524288 || !signature)
       throw new HttpError(400, "첨부자료의 종류나 크기가 맞지 않습니다.");
   }
-  if (request.submit && !hasEffort(effort))
+  if (
+    request.submit &&
+    effortMode(current.assessment) === "score" &&
+    !hasEffort(effort)
+  )
     throw new HttpError(
       400,
       "노력의 증거에 해본 일 한 가지를 적거나 자료를 첨부해주세요.",
@@ -183,6 +194,7 @@ export function mergeSubmission(
     title: request.title,
     sources: request.sources,
     effort,
+    attachments,
     submittedAt: request.submit ? Date.now() : current.submittedAt,
     pick: request.pick,
     reflections: request.reflections,

@@ -52,6 +52,9 @@ export async function POST(
       title: "",
       sources: "",
       doc: EMPTY_DOC,
+      ...(assignment.assessment
+        ? { assessment: structuredClone(assignment.assessment) }
+        : {}),
       events: [],
       snapshots: [],
       rhythm: [],

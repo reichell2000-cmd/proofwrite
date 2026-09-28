@@ -1,6 +1,66 @@
 import { z } from "zod";
 import { HttpError } from "./store";
+import { CATEGORY_IDS, planError } from "../core/assessment";
+export const assessmentSchema = z
+  .object({
+    version: z.literal(1),
+    category: z.enum(CATEGORY_IDS),
+    purpose: z.enum(["assignment", "classroom", "practice"]),
+    grading: z.enum(["score", "feedback"]),
+    criteria: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(80),
+            label: z.string().trim().min(1).max(80),
+            description: z.string().trim().min(1).max(500),
+            source: z.enum(["proof", "content", "custom"]),
+            mode: z.enum(["score", "reference", "exclude"]),
+            weight: z.number().int().min(0).max(100),
+            locked: z.boolean(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+  })
+  .strict()
+  .superRefine((plan, ctx) => {
+    const error = planError(plan);
+    if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+    for (const c of plan.criteria) {
+      const valid =
+        c.source === "proof"
+          ? /^proof:(thought|focus|diligence|effort|identity)$/.test(c.id)
+          : c.source === "custom"
+            ? c.id.startsWith("custom:")
+            : /^(content:|common:)/.test(c.id);
+      if (!valid)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "평가 항목 출처를 확인해주세요.",
+        });
+    }
+  });
+export const evaluationSchema = z
+  .object({
+    version: z.literal(1),
+    confirmed: z.boolean(),
+    scores: z
+      .array(
+        z
+          .object({
+            id: z.string().max(80),
+            value: z.number().finite().min(0).max(100).nullable(),
+            note: z.string().trim().max(2000),
+          })
+          .strict(),
+      )
+      .max(20),
+  })
+  .strict();
 export const assignmentSchema = z.object({
+  assessment: assessmentSchema.optional(),
   title: z.string().trim().min(1).max(160),
   description: z.string().max(6000),
   dueAt: z.number().int().positive().nullable().optional(),
@@ -124,6 +184,7 @@ export const syncSchema = z
     title: z.string().trim().max(160),
     sources: z.string().max(6000),
     effort: effortSchema.optional(),
+    attachments: effortSchema.shape.attachments.optional(),
     pick: z
       .object({
         text: z.string().min(1).max(1500),
@@ -154,6 +215,8 @@ export const learningResponseSchema = z
   .strict();
 export const reviewSchema = z
   .object({
+    assessment: evaluationSchema.optional(),
+    baseReviewUpdatedAt: z.number().int().nonnegative().optional(),
     passages: z.array(z.string().max(80)).max(30),
     fullRead: z.boolean(),
     reaction: z.enum([
@@ -169,7 +232,7 @@ export const reviewSchema = z
   .strict();
 export async function body(req: Request) {
   const text = await req.text();
-  if (text.length > 4_000_000)
+  if (text.length > 6_000_000)
     throw new HttpError(413, "한 번에 저장할 수 있는 크기를 초과했습니다.");
   try {
     return JSON.parse(text);

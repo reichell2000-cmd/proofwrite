@@ -2442,3 +2442,136 @@ fieldset .check-label {
 .editor-workspace {
   min-width: 0;
 }
+
+/* Published assignment formats and teacher-confirmed assessment */
+.assessment-builder {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--line, #d7e0d8);
+  border-radius: 12px;
+  background: #f5f7f1;
+}
+.assessment-actions,
+.criterion-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.assessment-actions label,
+.criterion-controls label {
+  flex: 1;
+  min-width: 100px;
+}
+.criterion-list {
+  display: grid;
+  gap: 12px;
+}
+.criterion-row {
+  margin: 0;
+  padding: 14px;
+  background: white;
+  border: 1px solid #d7e0d8;
+  border-radius: 8px;
+  min-width: 0;
+}
+.criterion-row legend {
+  font-weight: 700;
+  padding: 0 5px;
+}
+.criterion-row small {
+  font-weight: 400;
+}
+.criterion-row textarea {
+  width: 100%;
+}
+.criterion-controls input[type="number"] {
+  max-width: 110px;
+}
+.criterion-controls .check-label {
+  flex: 0 1 80px;
+  min-width: 75px;
+}
+.template-preview,
+.allocation-preview {
+  padding: 12px;
+  background: #eaf0e5;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.rubric-total {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.rubric-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #e1e6df;
+}
+.rubric-item b {
+  display: block;
+}
+.rubric-item b span {
+  float: right;
+}
+.rubric-item p {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin: 6px 0;
+}
+.assessment-summary {
+  margin: 16px 0;
+}
+.assessment-summary details {
+  margin-top: 12px;
+}
+.assignment-format {
+  margin-bottom: 20px;
+}
+.assignment-format ol {
+  padding-left: 22px;
+  line-height: 1.9;
+}
+.scope-note {
+  font-size: 0.88rem;
+  background: #f1efe2;
+  padding: 12px;
+  border-radius: 6px;
+  line-height: 1.7;
+}
+.evaluation-editor {
+  margin: 20px 0;
+  padding-top: 16px;
+  border-top: 1px solid #d7e0d8;
+}
+.evaluation-editor label {
+  margin: 8px 0;
+}
+.review-draft blockquote {
+  font-size: 0.92rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.review-draft .actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .assessment-builder {
+    padding: 12px;
+  }
+  .criterion-controls {
+    gap: 8px;
+  }
+  .assessment-summary {
+    padding: 16px;
+  }
+  .criterion-row legend {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .writing-aside > .assessment-summary {
+    grid-column: 1 / -1;
+  }
+}

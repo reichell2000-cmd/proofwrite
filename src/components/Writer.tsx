@@ -3,7 +3,17 @@ import Link from "next/link";
 import { EffortForm, EffortAttachments } from "./EffortForm";
 import { EvidencePanel } from "./EvidencePanel";
 import { fiveEvidence } from "../core/proof/five-evidence";
-import { hasEffort } from "../core/model";
+import { EMPTY_EFFORT, hasEffort } from "../core/model";
+import {
+  AssessmentSummary,
+  AssignmentFormat,
+  EvaluationResult,
+} from "./Assessment";
+import {
+  effortMode,
+  templateDoc,
+  hasAssignmentContent,
+} from "../core/assessment";
 import { features } from "../core/features";
 import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
@@ -191,6 +201,9 @@ function WritingSpace({
   assignment: PublicAssignment;
   local?: LocalDraft;
 }) {
+  const assessmentPlan = submission.assessment || assignment.assessment;
+  const effortRequired = effortMode(assessmentPlan) === "score";
+  const effortVisible = effortMode(assessmentPlan) !== "exclude";
   const live = useRef<Submission>(structuredClone(submission));
   const ack = useRef(local?.ackSeq ?? submission.events.at(-1)?.seq ?? 0);
   const revision = useRef(local?.revision ?? submission.revision);
@@ -523,6 +536,7 @@ function WritingSpace({
             title: copy.title,
             sources: copy.sources,
             effort: copy.effort,
+            attachments: copy.attachments,
             pick: final ? copy.pick : null,
             reflections: copy.reflections,
             submit: submit && final,
@@ -641,6 +655,22 @@ function WritingSpace({
     // A submitted document ends collection immediately. Metadata changes must not restart sessions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, submitted]);
+  useEffect(() => {
+    if (
+      editor &&
+      !submitted &&
+      assessmentPlan &&
+      collector.current &&
+      !submission.events.some((e) => e.payload?.steps) &&
+      !textOf(editor.getJSON()).trim()
+    ) {
+      command(
+        () =>
+          editor.commands.insertContent(templateDoc(assessmentPlan.category)),
+        "format",
+      );
+    }
+  }, [editor, submitted]);
   const command = (fn: () => void, type: EvidenceEventType = "format") => {
     const separate = type !== "undo" && type !== "redo";
     if (editor && separate) editor.view.dispatch(closeHistory(editor.state.tr));
@@ -740,7 +770,9 @@ function WritingSpace({
             <span>
               {hasEffort(s.effort)
                 ? "✓ 노력 기록 저장"
-                : "기존 제출 · 노력 항목 없음"}
+                : effortRequired
+                  ? "기존 제출 · 노력 항목 없음"
+                  : "별도 노력 제출 불필요"}
             </span>
             <span>✓ 제출 완료</span>
           </div>
@@ -754,11 +786,28 @@ function WritingSpace({
             내 과제로 돌아가기
           </Link>
           {localWarning && <Notice error>{localWarning}</Notice>}
+          {s.review.completed && (
+            <EvaluationResult
+              plan={assessmentPlan}
+              value={s.review.assessment}
+            />
+          )}
           <LearningFeedback submission={s} />
           <details className="panel text-left">
-            <summary>제출한 노력과 과정 기록</summary>
-            <EvidencePanel axes={fiveEvidence(s, assignment)} />
+            <summary>제출 자료와 과정 기록</summary>
+            <EvidencePanel
+              axes={fiveEvidence(s, assignment).filter(
+                (axis) =>
+                  !assessmentPlan ||
+                  assessmentPlan.criteria.some(
+                    (c) => c.id === `proof:${axis.id}` && c.mode !== "exclude",
+                  ),
+              )}
+            />
             <EffortAttachments effort={s.effort} />
+            <EffortAttachments
+              effort={{ ...EMPTY_EFFORT, attachments: s.attachments || [] }}
+            />
           </details>
           <button
             onClick={() =>
@@ -849,8 +898,12 @@ function WritingSpace({
           <span>작성 기록 자동 저장</span>
         </li>
         <li>
-          <a href="#effort-evidence">2. 노력의 증거</a>
-          <span>해본 일·자료 남기기</span>
+          <a href={effortVisible ? "#effort-evidence" : "#submit-bottom"}>
+            2. 자료·제출 확인
+          </a>
+          <span>
+            {effortRequired ? "노력의 근거 남기기" : "필요한 자료와 출처 확인"}
+          </span>
         </li>
         <li>
           <a href="#submit-bottom">3. 제출</a>
@@ -859,6 +912,7 @@ function WritingSpace({
       </ol>
       <div className="writing-layout">
         <main className="editor-column">
+          <AssignmentFormat plan={assessmentPlan} />
           <div className="editor-workspace">
             <div className="toolbar" role="toolbar" aria-label="글 편집 도구">
               <div className="tool-group">
@@ -1238,15 +1292,18 @@ function WritingSpace({
               </button>
             </div>
           </div>
-          <EffortForm
-            value={s.effort}
-            disabled={submitting}
-            onLoading={setAttachmentLoading}
-            onChange={(value) => {
-              s.effort = value;
-              bump();
-            }}
-          />
+          {effortVisible && (
+            <EffortForm
+              value={s.effort}
+              required={effortRequired}
+              disabled={submitting || attachmentLoading}
+              onLoading={setAttachmentLoading}
+              onChange={(value) => {
+                s.effort = value;
+                bump();
+              }}
+            />
+          )}
           <div className="panel">
             <label>
               참고자료 · 출처
@@ -1262,9 +1319,22 @@ function WritingSpace({
               />
             </label>
           </div>
+          {assessmentPlan && (
+            <EffortForm
+              attachmentsOnly
+              value={{ ...EMPTY_EFFORT, attachments: s.attachments || [] }}
+              disabled={submitting || attachmentLoading}
+              onLoading={setAttachmentLoading}
+              onChange={(value) => {
+                s.attachments = value.attachments;
+                bump();
+              }}
+            />
+          )}
         </main>
         <aside className="writing-aside">
           <LearningFocus assignment={assignment} />
+          <AssessmentSummary plan={assessmentPlan} />
           <div className="aside-card">
             <span className="overline">THOUGHT TRACE</span>
             <h3>생각이 남고 있어요.</h3>
@@ -1407,14 +1477,18 @@ function WritingSpace({
               <li>
                 {hasEffort(s.effort)
                   ? "✓ 노력의 증거 작성"
-                  : "해본 일 한 가지 또는 첨부자료가 필요해요"}
+                  : effortRequired
+                    ? "해본 일 한 가지 또는 첨부자료가 필요해요"
+                    : "✓ 별도 노력의 증거는 필수가 아니에요"}
               </li>
               <li>
-                노력 자료 {s.effort?.attachments.length || 0}개 · 선택 대목{" "}
-                {s.pick ? "있음" : "없음 (선택 항목)"}
+                첨부자료{" "}
+                {(s.effort?.attachments.length || 0) +
+                  (s.attachments?.length || 0)}
+                개 · 선택 대목 {s.pick ? "있음" : "없음 (선택 항목)"}
               </li>
             </ul>
-            {!hasEffort(s.effort) && (
+            {effortRequired && !hasEffort(s.effort) && (
               <button
                 onClick={() => {
                   setReviewOpen(false);
@@ -1430,7 +1504,8 @@ function WritingSpace({
                 노력의 증거 작성하러 가기
               </button>
             )}
-            {(!s.title.trim() || !textOf(s.doc).trim()) && (
+            {(!s.title.trim() ||
+              !hasAssignmentContent(textOf(s.doc), assessmentPlan)) && (
               <Notice>글로 돌아가 제목과 본문을 작성해주세요.</Notice>
             )}
             {s.pick && <blockquote>{s.pick.text}</blockquote>}
@@ -1461,10 +1536,10 @@ function WritingSpace({
                 className="primary"
                 disabled={
                   submitting ||
-                  !hasEffort(s.effort) ||
+                  (effortRequired && !hasEffort(s.effort)) ||
                   attachmentLoading ||
                   !s.title.trim() ||
-                  !textOf(s.doc).trim()
+                  !hasAssignmentContent(textOf(s.doc), assessmentPlan)
                 }
                 onClick={async () => {
                   setSubmitting(true);

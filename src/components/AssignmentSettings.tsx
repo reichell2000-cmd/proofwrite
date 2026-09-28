@@ -94,7 +94,14 @@ export function AssignmentSettings({
             onChange={(e) => setDue(e.target.value)}
           />
         </label>
-        <PriorityChoices value={priorities} onChange={setPriorities} />
+        {assignment.assessment ? (
+          <p>
+            게시한 읽기·평가 기준은 학생에게 안내한 그대로 고정되어 있습니다.
+            마감일만 변경할 수 있습니다.
+          </p>
+        ) : (
+          <PriorityChoices value={priorities} onChange={setPriorities} />
+        )}
         <p className="fine-print">
           내용의 표현 단서로 읽기 후보를 찾습니다. 이미 저장한 피드백과 제출
           원문은 유지됩니다.

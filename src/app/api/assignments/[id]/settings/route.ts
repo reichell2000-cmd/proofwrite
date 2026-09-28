@@ -1,5 +1,5 @@
 import { csrf, requireTeacher } from "../../../../../server/auth";
-import { read, write, locked } from "../../../../../server/store";
+import { read, write, locked, HttpError } from "../../../../../server/store";
 import {
   handler,
   body,
@@ -20,8 +20,19 @@ export async function POST(
       .strict()
       .parse(await body(req));
     return locked(async () => {
+      const current = await read<Assignment>("assignments", id);
+      if (
+        current.assessment &&
+        settings.contentPriorities &&
+        JSON.stringify(settings.contentPriorities) !==
+          JSON.stringify(current.contentPriorities)
+      )
+        throw new HttpError(
+          409,
+          "게시한 읽기·평가 기준은 고정됩니다. 다른 기준은 새 과제로 안내해주세요.",
+        );
       const assignment = {
-        ...(await read<Assignment>("assignments", id)),
+        ...current,
         ...settings,
       };
       await write("assignments", id, assignment);

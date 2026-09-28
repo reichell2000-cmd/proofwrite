@@ -25,8 +25,12 @@ export function EffortForm({
   onChange,
   disabled = false,
   onLoading,
+  attachmentsOnly = false,
+  required = true,
 }: {
   value?: EffortEvidence;
+  attachmentsOnly?: boolean;
+  required?: boolean;
   onChange: (value: EffortEvidence) => void;
   disabled?: boolean;
   onLoading?: (loading: boolean) => void;
@@ -37,46 +41,65 @@ export function EffortForm({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   return (
-    <section className="panel effort-form" id="effort-evidence">
-      <p className="overline">04 · YOUR EFFORT</p>
-      <h2>노력의 증거</h2>
-      <p className="muted">
-        글을 완성하기 위해 해본 일을 한 가지 적거나, 메모·초안·자료를
-        첨부해주세요. 다른 네 기준은 작성 기록에서 자동으로 살펴봅니다.
+    <section
+      className="panel effort-form"
+      id={attachmentsOnly ? "assignment-attachments" : "effort-evidence"}
+    >
+      <p className="overline">
+        {attachmentsOnly ? "ASSIGNMENT FILES" : "04 · YOUR EFFORT"}
       </p>
+      <h2>{attachmentsOnly ? "과제 첨부자료" : "노력의 증거"}</h2>
+      {!attachmentsOnly && !required && (
+        <p>선택 항목 · 참고용이며 제출하지 않아도 됩니다.</p>
+      )}
+      {attachmentsOnly ? (
+        <p className="muted">
+          외부 결과물이나 참고자료를 첨부할 수 있어요. 큰 파일·PPT·영상은
+          본문이나 출처에 링크와 설명을 남겨주세요.
+        </p>
+      ) : (
+        <>
+          <p className="muted">
+            글을 완성하기 위해 해본 일을 한 가지 적거나, 메모·초안·자료를
+            첨부해주세요. 다른 네 기준은 작성 기록에서 자동으로 살펴봅니다.
+          </p>
+          <label>
+            무엇이 어려웠나요? <small>(선택)</small>
+            <textarea
+              rows={2}
+              maxLength={2000}
+              disabled={disabled}
+              value={effort.difficulty}
+              onChange={(e) =>
+                onChange({ ...effort, difficulty: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            무엇을 해보았나요?
+            <textarea
+              rows={3}
+              maxLength={3000}
+              disabled={disabled}
+              value={effort.attempt}
+              placeholder="예: 주장을 뒷받침할 사례를 찾아 비교하고, 근거가 약한 문단을 다시 썼어요."
+              onChange={(e) => onChange({ ...effort, attempt: e.target.value })}
+            />
+          </label>
+          <label>
+            무엇이 달라졌나요? <small>(선택)</small>
+            <textarea
+              rows={2}
+              maxLength={2000}
+              disabled={disabled}
+              value={effort.outcome}
+              onChange={(e) => onChange({ ...effort, outcome: e.target.value })}
+            />
+          </label>
+        </>
+      )}
       <label>
-        무엇이 어려웠나요? <small>(선택)</small>
-        <textarea
-          rows={2}
-          maxLength={2000}
-          disabled={disabled}
-          value={effort.difficulty}
-          onChange={(e) => onChange({ ...effort, difficulty: e.target.value })}
-        />
-      </label>
-      <label>
-        무엇을 해보았나요?
-        <textarea
-          rows={3}
-          maxLength={3000}
-          disabled={disabled}
-          value={effort.attempt}
-          placeholder="예: 주장을 뒷받침할 사례를 찾아 비교하고, 근거가 약한 문단을 다시 썼어요."
-          onChange={(e) => onChange({ ...effort, attempt: e.target.value })}
-        />
-      </label>
-      <label>
-        무엇이 달라졌나요? <small>(선택)</small>
-        <textarea
-          rows={2}
-          maxLength={2000}
-          disabled={disabled}
-          value={effort.outcome}
-          onChange={(e) => onChange({ ...effort, outcome: e.target.value })}
-        />
-      </label>
-      <label>
-        노력 자료 첨부{" "}
+        {attachmentsOnly ? "과제 자료 첨부" : "노력 자료 첨부"}{" "}
         <small>(선택 · PDF, PNG, JPEG, WebP · 각 512KB 이하, 최대 3개)</small>
         <input
           type="file"

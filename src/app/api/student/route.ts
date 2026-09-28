@@ -32,7 +32,13 @@ export const GET = handler(async () => {
         responded:
           !!s.learningResponse &&
           s.learningResponse.reviewUpdatedAt === s.review.updatedAt,
-        axes: fiveEvidence(s, a),
+        axes: fiveEvidence(s, a).filter(
+          (axis) =>
+            !s.assessment ||
+            s.assessment.criteria.some(
+              (c) => c.id === `proof:${axis.id}` && c.mode !== "exclude",
+            ),
+        ),
       });
     } catch (e) {
       if (!(e instanceof HttpError && e.status === 404)) throw e;

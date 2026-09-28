@@ -178,7 +178,7 @@ test("teacher → student → rich edits and IME → reload → submit → manda
   await page.getByRole("button", { name: "이 대목에 피드백 쓰기" }).click();
   await page.getByRole("button", { name: "읽기 안내", exact: true }).click();
   const complete = page.getByRole("button", {
-    name: "피드백 전달",
+    name: "평가 확정·피드백 전달",
     exact: true,
   });
   const feedback = {
@@ -195,6 +195,7 @@ test("teacher → student → rich edits and IME → reload → submit → manda
       await page.request.post(reviewUrl, {
         headers: { origin },
         data: {
+          baseReviewUpdatedAt: 0,
           passages: [],
           fullRead: false,
           reaction: "",
@@ -208,7 +209,13 @@ test("teacher → student → rich edits and IME → reload → submit → manda
     (
       await page.request.post(reviewUrl, {
         headers: { origin },
-        data: { passages: [], fullRead: true, reaction: "", completed: true },
+        data: {
+          baseReviewUpdatedAt: 0,
+          passages: [],
+          fullRead: true,
+          reaction: "",
+          completed: true,
+        },
       })
     ).status(),
   ).toBe(400);
@@ -217,6 +224,7 @@ test("teacher → student → rich edits and IME → reload → submit → manda
       await page.request.post(reviewUrl, {
         headers: { origin },
         data: {
+          baseReviewUpdatedAt: 0,
           passages: [],
           fullRead: true,
           reaction: "",
@@ -237,6 +245,18 @@ test("teacher → student → rich edits and IME → reload → submit → manda
   await page.getByLabel("생각을 넓히는 질문").fill(feedback.question);
   await page.getByLabel("다음에 해볼 수정 한 가지").fill(feedback.nextStep);
   await page.getByLabel("짧은 반응").selectOption("좋은 생각이에요");
+  for (const c of data.submission.assessment.criteria.filter(
+    (c: { mode: string }) => c.mode === "score",
+  )) {
+    await page
+      .getByLabel(`${c.label} 평가 점수`, { exact: true })
+      .fill(String(c.weight));
+    if (c.source !== "content")
+      await page
+        .getByLabel(`${c.label} 확인 근거`, { exact: true })
+        .fill("본문과 작성 기록을 함께 읽고 확인했습니다.");
+  }
+  await page.getByLabel("평가와 근거 최종 확인").check();
   await page.getByRole("button", { name: "중간 저장", exact: true }).click();
   await expect(
     page.getByText("중간 저장했습니다. 학생에게는 아직 보이지 않습니다."),
