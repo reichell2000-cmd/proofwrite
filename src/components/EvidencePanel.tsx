@@ -8,7 +8,8 @@ export function EvidencePanel({ axes }: { axes: EvidenceAxis[] }) {
           <h2>다섯 가지 과정 증거</h2>
         </div>
         <span className="evidence-count">
-          {axes.filter((a) => a.available).length}/5 항목에 관찰 자료
+          {axes.filter((a) => a.available).length}/{axes.length} 사용 항목에
+          관찰 자료
         </span>
       </div>
       <p className="muted">
@@ -16,10 +17,19 @@ export function EvidencePanel({ axes }: { axes: EvidenceAxis[] }) {
         0점으로 처리하지 않습니다.
       </p>
       <div className="evidence-grid">
-        {axes.map((a, index) => (
+        {axes.map((a) => (
           <article className="evidence-card" key={a.id}>
             <div className="evidence-label">
-              <span>0{index + 1}</span>
+              <span>
+                0
+                {[
+                  "thought",
+                  "focus",
+                  "diligence",
+                  "effort",
+                  "identity",
+                ].indexOf(a.id) + 1}
+              </span>
               <small>{a.source}</small>
             </div>
             <h3>{a.title}</h3>

@@ -15,11 +15,12 @@ export async function POST(
     await requireStudent(id);
     const request = syncSchema.parse(await body(req));
     return locked(async () => {
+      await requireStudent(id);
       const current = await read<Submission>("submissions", id);
       const next = mergeSubmission(current, request);
       if (
         next.rhythmOptIn &&
-        !next.rhythmBaseline &&
+        (!next.rhythmBaseline || !!next.studentId) &&
         current.status === "draft"
       )
         next.rhythmBaseline = await findRhythmBaseline(next);

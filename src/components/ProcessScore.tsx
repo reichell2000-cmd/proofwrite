@@ -28,8 +28,10 @@ export function ProcessScore({ submission }: { submission: Submission }) {
       facts:
         score.myProof === null
           ? "수집 미참여·유효 표본 부족: 계산에서 제외"
-          : `${rhythm.mode === "composition" ? "조합" : "일반"} 입력 ${rhythm.samples.length}표본 · ${rhythm.baseline ? "이전 제출과 비교" : "과제 전·후반 비교"}`,
-      rule: "같은 입력 방식의 간격 유사도 × 25. 최소 80개 유효 표본일 때만 계산",
+          : `${rhythm.mode === "composition" ? "조합" : "일반"} 입력 ${rhythm.samples.length}표본 · ${submission.rhythmBaseline?.registrationId ? "등록한 타자 기준과 비교" : rhythm.baseline ? "이전 제출과 비교" : "과제 전·후반 비교"}`,
+      rule: submission.rhythmBaseline?.registrationId
+        ? "등록 기준의 간격 중앙값 40%·상위 간격 20%·키 누름 25%·연속 입력 15%를 비교한 시범 유사도 × 25. 최소 80개 표본과 2개 지표가 필요"
+        : "같은 입력 방식의 간격 유사도 × 25. 최소 80개 유효 표본일 때만 계산",
     },
     {
       title: "입력 기록",

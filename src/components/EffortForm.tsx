@@ -1,10 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
-import {
-  EMPTY_EFFORT,
-  type EffortEvidence,
-  type EffortAttachment,
-} from "../core/model";
+import { EMPTY_EFFORT, type EffortEvidence } from "../core/model";
+import { prepareAttachment } from "../core/attachments";
 import { Notice } from "./Shell";
 export function EffortAttachments({ effort }: { effort?: EffortEvidence }) {
   return (
@@ -40,6 +37,7 @@ export function EffortForm({
   latest.current = effort;
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   return (
     <section
       className="panel effort-form"
@@ -100,7 +98,10 @@ export function EffortForm({
       )}
       <label>
         {attachmentsOnly ? "과제 자료 첨부" : "노력 자료 첨부"}{" "}
-        <small>(선택 · PDF, PNG, JPEG, WebP · 각 512KB 이하, 최대 3개)</small>
+        <small>
+          (선택 · PDF, PNG, JPEG, WebP · PDF 2MB · 사진 12MB까지 선택, 저장 2MB
+          · 최대 3개)
+        </small>
         <input
           type="file"
           disabled={disabled || loading || effort.attachments.length >= 3}
@@ -109,44 +110,24 @@ export function EffortForm({
             const file = e.target.files?.[0];
             e.target.value = "";
             if (!file) return;
-            if (
-              file.size > 524288 ||
-              file.size === 0 ||
-              ![
-                "application/pdf",
-                "image/png",
-                "image/jpeg",
-                "image/webp",
-              ].includes(file.type)
-            ) {
-              setError("512KB 이하의 PDF·PNG·JPEG·WebP 파일을 선택해주세요.");
-              return;
-            }
             setLoading(true);
             onLoading?.(true);
             setError("");
+            setMessage("");
             try {
-              const data = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result));
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-              });
+              const { attachment, resized } = await prepareAttachment(file);
               onChange({
                 ...latest.current,
-                attachments: [
-                  ...latest.current.attachments,
-                  {
-                    id: crypto.randomUUID(),
-                    name: file.name.slice(0, 180),
-                    mime: file.type as EffortAttachment["mime"],
-                    size: file.size,
-                    data,
-                  },
-                ],
+                attachments: [...latest.current.attachments, attachment],
               });
-            } catch {
-              setError("첨부자료를 읽지 못했습니다. 다시 선택해주세요.");
+              if (resized)
+                setMessage(
+                  "사진을 2MB 이하로 줄였어요. 제출 전에 글씨와 그림이 잘 보이는지 확인해주세요.",
+                );
+            } catch (e) {
+              setError(
+                e instanceof Error ? e.message : "첨부자료를 읽지 못했습니다.",
+              );
             } finally {
               setLoading(false);
               onLoading?.(false);
@@ -180,6 +161,7 @@ export function EffortForm({
           </li>
         ))}
       </ul>
+      {message && <Notice>{message}</Notice>}
       {error && <Notice error>{error}</Notice>}
     </section>
   );

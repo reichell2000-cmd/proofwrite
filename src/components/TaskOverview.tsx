@@ -83,6 +83,21 @@ export default function TaskOverview({ id }: { id: string }) {
                 →
               </Link>
             </section>
+            <section className="panel">
+              <h3>나의 타자 기준</h3>
+              <p>선택한 경우 등록한 입력 습관과 과제 작성 기록을 비교합니다.</p>
+              <Link
+                className="button outline"
+                href={`/student/identity?returnTo=${encodeURIComponent(`/task/${id}`)}`}
+              >
+                나의 타자 기준 등록·확인
+              </Link>
+              {data.submission.status === "submitted" && (
+                <Link className="button primary" href={`/report/${id}`}>
+                  나의 증명 보고서
+                </Link>
+              )}
+            </section>
             <ol className="writing-steps">
               <li>
                 <b>1. 글쓰기</b>

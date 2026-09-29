@@ -55,3 +55,18 @@ export function saveLocal(id: string, value: LocalDraft) {
   pendingWrite = next;
   return next;
 }
+
+export async function clearLocalDrafts() {
+  await pendingWrite.catch(() => {});
+  const database = await db();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = database.transaction("drafts", "readwrite");
+      tx.objectStore("drafts").clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    database.close();
+  }
+}

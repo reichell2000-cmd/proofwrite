@@ -152,9 +152,13 @@ export function fiveEvidence(
       status: !s.rhythmOptIn
         ? "리듬 수집 미참여"
         : continuity === null
-          ? "비교 표본 부족"
+          ? s.studentId && !s.rhythmBaseline?.registrationId
+            ? "등록한 같은 기기 기준 없음"
+            : "비교 표본 부족"
           : baseline
-            ? "이전 제출의 입력 습관과 비교"
+            ? s.rhythmBaseline?.registrationId
+              ? "등록한 나의 타자 기준과 비교"
+              : "이전 제출의 입력 습관과 비교"
             : "이번 과제의 전·후반 비교",
       facts: !s.rhythmOptIn
         ? ["세부 타이핑 리듬 수집을 선택하지 않았습니다."]
@@ -163,16 +167,20 @@ export function fiveEvidence(
             ...(continuity !== null
               ? [
                   baseline
-                    ? `이전 제출 간격 ${Math.round(baseline.medianFlightMs!)}ms · 이번 과제 ${Math.round(buildRhythmProfile(samples).medianFlightMs!)}ms`
+                    ? `${s.rhythmBaseline?.registrationId ? "등록 기준" : "이전 제출"} 간격 ${Math.round(baseline.medianFlightMs!)}ms · 이번 과제 ${Math.round(buildRhythmProfile(samples).medianFlightMs!)}ms`
                     : `전반 간격 중앙값 ${Math.round(before.medianFlightMs!)}ms · 후반 ${Math.round(after.medianFlightMs!)}ms`,
-                  `간격 유사도 ${Math.round(continuity * 100)}% (시범 지표)`,
+                  `${s.rhythmBaseline?.registrationId ? "입력 패턴" : "간격"} 유사도 ${Math.round(continuity * 100)}% (시범 지표 · 본인일 확률 아님)`,
                 ]
               : []),
             baseline
-              ? "이 브라우저에서 같은 별명으로 제출한 이전 과제를 기준으로 사용했습니다."
+              ? s.rhythmBaseline?.registrationId
+                ? `등록 기기: ${s.rhythmBaseline.deviceLabel} · ${s.rhythmBaseline.verifiedAt ? "교사가 등록 모습을 확인함" : "본인 등록 · 교사 확인 전"}`
+                : "이 브라우저에서 같은 별명으로 제출한 이전 과제를 기준으로 사용했습니다."
               : "이전 과제의 개인 기준 패턴: 아직 없음",
           ],
-      note: "이전 제출 기록이 없으면 과제 전·후반을 비교합니다. 별명·브라우저는 신원을 보증하지 않으며 유사도는 본인 작성 확률이 아닙니다. 한글 조합·기기 변화로 표본이 부족하거나 차이가 날 수 있습니다.",
+      note: s.studentId
+        ? "등록 기준과 같은 기기·입력 방식의 기록을 비교합니다. 수치는 본인일 확률이 아니며 차이가 있으면 작성 맥락을 함께 확인합니다. 비교 자료 부족은 0점이 아닙니다."
+        : "이전 제출이 없으면 과제 전·후반을 비교합니다. 별명·브라우저는 신원을 보증하지 않으며 유사도는 본인 작성 확률이 아닙니다.",
     },
   ];
 }

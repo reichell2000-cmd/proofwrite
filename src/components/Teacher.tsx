@@ -41,6 +41,7 @@ import { textOf, externalTransformation } from "../core/evidence/replay";
 import { buildReadingGuide } from "../core/teacher/reading-guide";
 import { readingProgress } from "../core/teacher/review-progress";
 import type { ProofScoreBreakdown } from "../core/proof/score";
+import { IdentityReview } from "./IdentityReview";
 import { ProcessScore } from "./ProcessScore";
 import { ReviewDraft } from "./ReviewDraft";
 import {
@@ -95,14 +96,6 @@ export default function Teacher() {
   const [assessment, setAssessment] = useState(() =>
     recommendedPlan("argument"),
   );
-  const [assessmentCustomized, setAssessmentCustomized] = useState(false);
-  useEffect(() => {
-    if (!assessmentCustomized)
-      setAssessment((old) => ({
-        ...recommendedPlan(old.category, learningGoal),
-        purpose: old.purpose,
-      }));
-  }, [learningGoal, assessment.category, assessmentCustomized]);
   async function load() {
     try {
       const result = await api<{ assignments: Assignment[] }>(
@@ -640,7 +633,6 @@ export default function Teacher() {
                 setPriorities(DEFAULT_PRIORITIES);
                 setCustom("");
                 setAssessment(recommendedPlan("argument"));
-                setAssessmentCustomized(false);
               } catch (e) {
                 setError((e as Error).message);
               } finally {
@@ -700,7 +692,6 @@ export default function Teacher() {
             <AssessmentBuilder
               value={assessment}
               onChange={(plan) => {
-                setAssessmentCustomized(plan.category === assessment.category);
                 setAssessment(plan);
               }}
               goal={learningGoal}
@@ -1106,16 +1097,38 @@ function ReviewPanel({
           )}
           {tab === "evidence" && (
             <>
-              {!assessmentPlan && <ProcessScore submission={s} />}
+              <ProcessScore submission={s} />
+              <IdentityReview id={s.id} />
+              {(s.authorshipNote || s.clarification) && (
+                <section className="panel">
+                  <h3>작성자의 설명</h3>
+                  <p className="pre-wrap">{s.authorshipNote}</p>
+                  {s.clarification && (
+                    <p className="pre-wrap">
+                      제출 후 재확인 요청: {s.clarification.text}
+                    </p>
+                  )}
+                </section>
+              )}
+              <a className="button outline" href={`/report/${s.id}`}>
+                나의 증명 보고서 보기
+              </a>
               <EvidencePanel axes={axes} />
               <section className="panel">
-                <h3>학생이 첨부한 노력 자료</h3>
-                <EffortAttachments effort={s.effort} />
+                <h3>과제 첨부자료</h3>
                 <EffortAttachments
                   effort={{ ...EMPTY_EFFORT, attachments: s.attachments || [] }}
                 />
+                {!s.attachments?.length && (
+                  <p className="muted">과제 첨부자료가 없습니다.</p>
+                )}
+              </section>
+              <section className="panel">
+                <h3>학생이 첨부한 노력 자료</h3>
+                <EffortAttachments effort={s.effort} />
+
                 {!s.effort?.attachments.length && (
-                  <p className="muted">첨부자료가 없습니다.</p>
+                  <p className="muted">노력 첨부자료가 없습니다.</p>
                 )}
               </section>
             </>
@@ -1344,7 +1357,7 @@ function ReviewPanel({
                               const proposal = draft.suggestions.find(
                                 (p) => p.id === row.id,
                               );
-                              return proposal
+                              return proposal && !row.unavailable
                                 ? {
                                     ...row,
                                     value: proposal.value,

@@ -10,6 +10,7 @@ import {
   blankEvaluation,
   gradeError,
   gradeTotal,
+  effortMode,
 } from "./assessment";
 import { assessmentSchema } from "../server/validation";
 import { validateDoc } from "../server/sync";
@@ -98,6 +99,9 @@ describe("published assessment contracts", () => {
   it("a feedback-only assignment has no numeric assessment", () => {
     const p = recommendedPlan("reflection");
     p.grading = "feedback";
+    expect(
+      effortMode({ ...recommendedPlan("research"), grading: "feedback" }),
+    ).toBe("reference");
     p.criteria = p.criteria.map((c) => ({
       ...c,
       mode: c.mode === "score" ? "reference" : c.mode,
@@ -109,4 +113,65 @@ describe("published assessment contracts", () => {
     expect(v.scores).toEqual([]);
     expect(gradeError(p, v)).toBe("");
   });
+});
+
+import {
+  recommendedRevision,
+  gradeAvailableMax,
+  GRADE_BANDS,
+  sectionsFor,
+} from "./assessment";
+it("recommendation preserves teacher exclusions, custom criteria and locked points without keyword triggers", () => {
+  const p = recommendedPlan("research", "창의력은 평가하지 않습니다");
+  expect(p.criteria.some((c) => c.id === "common:creativity")).toBe(false);
+  p.criteria = p.criteria.map((c) =>
+    c.id === "proof:effort" ? { ...c, mode: "exclude", weight: 0 } : c,
+  );
+  p.criteria.push({
+    id: "custom:oral",
+    label: "직접 관찰",
+    description: "교사가 직접 들은 설명",
+    source: "custom",
+    mode: "score",
+    weight: 30,
+    locked: true,
+  });
+  const r = recommendedRevision(p);
+  expect(r.criteria.find((c) => c.id === "custom:oral")?.weight).toBe(30);
+  expect(r.criteria.find((c) => c.id === "proof:effort")?.mode).toBe("exclude");
+  expect(planError(r)).toBe("");
+});
+it("missing evidence is explicitly excluded and remaining weights normalize to 100", () => {
+  const p = recommendedPlan("research"),
+    v = blankEvaluation(p);
+  v.confirmed = true;
+  v.scores = v.scores.map((row) => ({
+    ...row,
+    value: p.criteria.find((c) => c.id === row.id)!.weight,
+    note: "본문과 수행 기록 확인",
+  }));
+  v.scores[0] = {
+    ...v.scores[0],
+    value: null,
+    unavailable: true,
+    note: "직접 입력 자료 부족",
+  };
+  expect(gradeError(p, v)).toBe("");
+  expect(gradeAvailableMax(p, v)).toBe(90);
+  expect(gradeTotal(v, p)).toBe(100);
+  v.scores = v.scores.map((r) => ({ ...r, value: null, unavailable: true }));
+  expect(gradeError(p, v)).toContain("모든 항목");
+});
+it("all grade-specific templates are valid and empty prompts cannot count as student work", () => {
+  for (const category of CATEGORY_IDS)
+    for (const gradeBand of Object.keys(
+      GRADE_BANDS,
+    ) as (keyof typeof GRADE_BANDS)[]) {
+      const p = { ...recommendedPlan(category), gradeBand };
+      const doc = templateDoc(category, gradeBand);
+      validateDoc(doc);
+      expect(hasAssignmentContent(textOf(doc), p)).toBe(false);
+      if (gradeBand === "lowerPrimary" || gradeBand === "middlePrimary")
+        expect(sectionsFor(category, gradeBand)).toHaveLength(3);
+    }
 });

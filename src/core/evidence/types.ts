@@ -53,6 +53,7 @@ export interface WritingSnapshot {
   charCount: number;
 }
 export interface RhythmSample {
+  deviceId?: string;
   mode?: "direct" | "composition";
   at: number;
   dwellMs?: number;

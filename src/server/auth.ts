@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { HttpError } from "./store";
+import { HttpError, read } from "./store";
+import type { StudentAccount } from "../core/identity";
+import type { Submission } from "../core/model";
 function secret() {
   const value = process.env.PROOFWRITE_SESSION_SECRET;
   if (!value || value.length < 32)
@@ -38,11 +40,40 @@ export async function requireTeacher() {
   if (!(await isTeacher()))
     throw new HttpError(401, "교사 로그인이 필요합니다.");
 }
+export async function currentStudent(): Promise<StudentAccount | null> {
+  const value = (await cookies()).get("pw_profile")?.value;
+  const scope = value?.split("|")[0];
+  if (
+    !scope ||
+    !/^profile:[a-f0-9-]{36}:\d+$/.test(scope) ||
+    !valid(value, scope)
+  )
+    return null;
+  try {
+    const a = await read<StudentAccount>("students", scope.split(":")[1]);
+    return scope === `profile:${a.id}:${a.sessionVersion}` ? a : null;
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) return null;
+    throw e;
+  }
+}
+export async function requireAccount() {
+  const a = await currentStudent();
+  if (!a) throw new HttpError(401, "학생 연결이 필요합니다.");
+  return a;
+}
+export async function studentSession(a: StudentAccount) {
+  await setSession("pw_profile", `profile:${a.id}:${a.sessionVersion}`);
+}
 export async function requireStudent(id: string) {
-  if (!valid((await cookies()).get(`pw_s_${id}`)?.value, `student:${id}`))
+  const s = await read<Submission>("submissions", id);
+  const allowed = s.studentId
+    ? (await currentStudent())?.id === s.studentId
+    : valid((await cookies()).get(`pw_s_${id}`)?.value, `student:${id}`);
+  if (!allowed)
     throw new HttpError(
       403,
-      "이 문서에 접근할 수 없습니다. 같은 브라우저에서 참여 링크를 열어주세요.",
+      "이 문서에 접근할 수 없습니다. 학생 연결 또는 기존 참여 브라우저를 확인해주세요.",
     );
 }
 export async function requireReader(id: string) {

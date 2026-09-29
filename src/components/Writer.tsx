@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { inputDeviceId } from "../core/identity";
+import { Clarification } from "./Clarification";
 import { EffortForm, EffortAttachments } from "./EffortForm";
 import { EvidencePanel } from "./EvidencePanel";
 import { fiveEvidence } from "../core/proof/five-evidence";
@@ -205,6 +207,11 @@ function WritingSpace({
   const effortRequired = effortMode(assessmentPlan) === "score";
   const effortVisible = effortMode(assessmentPlan) !== "exclude";
   const live = useRef<Submission>(structuredClone(submission));
+  const deviceId = useRef("");
+  useEffect(() => {
+    deviceId.current = inputDeviceId();
+    live.current.rhythmDeviceId = deviceId.current;
+  }, []);
   const ack = useRef(local?.ackSeq ?? submission.events.at(-1)?.seq ?? 0);
   const revision = useRef(local?.revision ?? submission.revision);
   const collector = useRef<EvidenceCollector | null>(null);
@@ -297,6 +304,7 @@ function WritingSpace({
                 composing.current || e.isComposing || e.key === "Process"
                   ? "composition"
                   : "direct",
+                deviceId.current,
               );
           }
           return false;
@@ -533,6 +541,8 @@ function WritingSpace({
               ? copy.rhythm.slice(rhythmAck.current).slice(-10000)
               : [],
             rhythmOptIn: copy.rhythmOptIn,
+            rhythmDeviceId: copy.rhythmDeviceId,
+            authorshipNote: copy.authorshipNote,
             title: copy.title,
             sources: copy.sources,
             effort: copy.effort,
@@ -558,6 +568,7 @@ function WritingSpace({
         revision.current = response.revision;
         live.current.revision = response.revision;
         rhythmAck.current = copy.rhythm.length;
+        live.current.rhythmBaseline = response.rhythmBaseline;
         saved.current = dirtyVersion;
         setMessage("모든 변경사항 저장됨");
         setError("");
@@ -666,7 +677,9 @@ function WritingSpace({
     ) {
       command(
         () =>
-          editor.commands.insertContent(templateDoc(assessmentPlan.category)),
+          editor.commands.insertContent(
+            templateDoc(assessmentPlan.category, assessmentPlan.gradeBand),
+          ),
         "format",
       );
     }
@@ -792,6 +805,10 @@ function WritingSpace({
               value={s.review.assessment}
             />
           )}
+          <Link className="button primary" href={`/report/${s.id}`}>
+            나의 증명 보고서
+          </Link>
+          <Clarification id={s.id} initial={s.clarification?.text} />
           <LearningFeedback submission={s} />
           <details className="panel text-left">
             <summary>제출 자료와 과정 기록</summary>
@@ -804,7 +821,9 @@ function WritingSpace({
                   ),
               )}
             />
+            <h3>노력 첨부자료</h3>
             <EffortAttachments effort={s.effort} />
+            <h3>과제 첨부자료</h3>
             <EffortAttachments
               effort={{ ...EMPTY_EFFORT, attachments: s.attachments || [] }}
             />
@@ -1395,12 +1414,37 @@ function WritingSpace({
               </>
             )}
           </div>
+          <section className="aside-card">
+            <h3>나의 타자 기준</h3>
+            <p>
+              등록한 같은 기기·입력 방식과 과제 입력 습관을 비교할 수 있어요.
+            </p>
+            <Link
+              href={`/student/identity?returnTo=${encodeURIComponent(`/task/${s.id}`)}`}
+            >
+              나의 타자 기준 등록·확인
+            </Link>
+            <p className="fine-print">이동 전에 저장 완료를 확인해주세요.</p>
+            <label>
+              작성 환경 설명 (선택)
+              <textarea
+                rows={2}
+                maxLength={2000}
+                value={s.authorshipNote || ""}
+                onChange={(e) => {
+                  s.authorshipNote = e.target.value;
+                  bump();
+                }}
+                placeholder="예: 키보드를 바꾸었거나 종이에 먼저 생각을 정리했어요."
+              />
+            </label>
+          </section>
           <details className="aside-card">
             <summary>작성 리듬 연구 설정</summary>
             <p>
-              선택 참여입니다. 입력 간격을 자동 비교합니다. 같은 브라우저·별명의
-              이전 제출 기록이 있으면 기준으로 삼습니다. 한글 조합과 일반 입력은
-              따로 비교하며, 신원 판별에는 사용하지 않습니다.
+              선택 참여입니다. 학생 연결 후 등록한 같은 기기·입력 방식의 기준과
+              비교합니다. 한글 조합과 일반 입력은 따로 비교합니다. 비교 결과는
+              본인일 확률이 아닙니다.
             </p>
             <label className="check-label">
               <input

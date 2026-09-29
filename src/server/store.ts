@@ -10,13 +10,13 @@ export class HttpError extends Error {
   }
 }
 const root = () => path.resolve(process.env.PROOFWRITE_DATA_DIR || ".data");
-const file = (kind: "assignments" | "submissions", id: string) => {
+const file = (kind: "assignments" | "submissions" | "students", id: string) => {
   if (!/^[a-f0-9-]{36}$/.test(id))
     throw new HttpError(400, "잘못된 식별자입니다.");
   return path.join(root(), kind, `${id}.json`);
 };
 export async function read<T>(
-  kind: "assignments" | "submissions",
+  kind: "assignments" | "submissions" | "students",
   id: string,
 ): Promise<T> {
   try {
@@ -28,7 +28,7 @@ export async function read<T>(
   }
 }
 export async function write(
-  kind: "assignments" | "submissions",
+  kind: "assignments" | "submissions" | "students",
   id: string,
   value: unknown,
 ) {
@@ -39,7 +39,7 @@ export async function write(
   await rename(temp, dest);
 }
 export async function list<T>(
-  kind: "assignments" | "submissions",
+  kind: "assignments" | "submissions" | "students",
 ): Promise<T[]> {
   try {
     const names = await readdir(path.join(root(), kind));

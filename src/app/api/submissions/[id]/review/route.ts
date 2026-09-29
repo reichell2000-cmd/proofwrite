@@ -5,7 +5,12 @@ import { buildReadingGuide } from "../../../../../core/teacher/reading-guide";
 import type { Assignment, Submission } from "../../../../../core/model";
 import { textOf } from "../../../../../core/evidence/replay";
 import { readingProgress } from "../../../../../core/teacher/review-progress";
-import { gradeError, gradeTotal } from "../../../../../core/assessment";
+import {
+  gradeError,
+  gradeTotal,
+  gradeAvailableMax,
+} from "../../../../../core/assessment";
+import { fiveEvidence } from "../../../../../core/proof/five-evidence";
 export const runtime = "nodejs";
 export async function POST(
   req: Request,
@@ -35,6 +40,22 @@ export async function POST(
       if (plan && review.completed) {
         const issue = gradeError(plan, review.assessment);
         if (issue) throw new HttpError(400, issue);
+        for (const axis of fiveEvidence(current, assignment)) {
+          const criterion = plan.criteria.find(
+            (c) => c.id === `proof:${axis.id}` && c.mode === "score",
+          );
+          if (
+            plan.grading === "score" &&
+            criterion &&
+            !axis.available &&
+            !review.assessment?.scores.find((r) => r.id === criterion.id)
+              ?.unavailable
+          )
+            throw new HttpError(
+              400,
+              `${axis.title}: 관찰 자료가 없습니다. 자료 부족을 선택하고 사유를 남겨주세요.`,
+            );
+        }
       }
       const guide = buildReadingGuide(
         current.events,
@@ -70,7 +91,10 @@ export async function POST(
               assessment: {
                 ...review.assessment,
                 ...(review.completed && plan.grading === "score"
-                  ? { total: gradeTotal(review.assessment)! }
+                  ? {
+                      total: gradeTotal(review.assessment, plan)!,
+                      availableMax: gradeAvailableMax(plan, review.assessment),
+                    }
                   : {}),
               },
             }

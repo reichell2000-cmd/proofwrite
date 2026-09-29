@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { valid } from "./auth";
 import { read, HttpError } from "./store";
+import type { StudentAccount } from "../core/identity";
 import type { Submission } from "../core/model";
 import { buildRhythmProfile, comparableRhythm } from "../core/my-proof/rhythm";
 // The browser must still hold the previous submission's signed student capability.
@@ -8,7 +9,30 @@ import { buildRhythmProfile, comparableRhythm } from "../core/my-proof/rhythm";
 export async function findRhythmBaseline(
   current: Submission,
 ): Promise<Submission["rhythmBaseline"]> {
-  const currentGroup = comparableRhythm(current.rhythm);
+  const currentGroup = comparableRhythm(
+    current.rhythm.filter(
+      (x) => !current.studentId || x.deviceId === current.rhythmDeviceId,
+    ),
+  );
+  if (current.studentId) {
+    const account = await read<StudentAccount>("students", current.studentId);
+    const r = account.registrations.find(
+      (r) =>
+        r.deviceId === current.rhythmDeviceId && r.mode === currentGroup.mode,
+    );
+    return r
+      ? {
+          profile: r.profile,
+          mode: r.mode,
+          submissionId: current.id,
+          capturedAt: r.registeredAt,
+          registrationId: r.id,
+          deviceId: r.deviceId,
+          deviceLabel: r.deviceLabel,
+          verifiedAt: r.verifiedAt,
+        }
+      : undefined;
+  }
   if (currentGroup.samples.length < 80) return;
   const candidates: Submission[] = [];
   for (const cookie of (await cookies()).getAll()) {
@@ -18,6 +42,7 @@ export async function findRhythmBaseline(
     try {
       const previous = await read<Submission>("submissions", id);
       if (
+        !previous.studentId &&
         previous.status === "submitted" &&
         previous.rhythmOptIn &&
         previous.alias === current.alias &&

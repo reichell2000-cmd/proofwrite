@@ -11,6 +11,15 @@ export const CATEGORY_IDS = [
   "presentation",
 ] as const;
 export type CategoryId = (typeof CATEGORY_IDS)[number];
+export const GRADE_BANDS = {
+  lowerPrimary: "초등 1~2학년",
+  middlePrimary: "초등 3~4학년",
+  upperPrimary: "초등 5~6학년",
+  middle: "중학생",
+  high: "고등학생 이상",
+} as const;
+export type GradeBand = keyof typeof GRADE_BANDS;
+export type Emphasis = "balanced" | "creativity" | "evidence";
 export type CriterionMode = "score" | "reference" | "exclude";
 export interface Criterion {
   id: string;
@@ -24,15 +33,23 @@ export interface Criterion {
 export interface AssessmentPlan {
   version: 1;
   category: CategoryId;
+  gradeBand?: GradeBand;
+  emphasis?: Emphasis;
   purpose: "assignment" | "classroom" | "practice";
   grading: "score" | "feedback";
   criteria: Criterion[];
 }
 export interface Evaluation {
   version: 1;
-  scores: { id: string; value: number | null; note: string }[];
+  scores: {
+    id: string;
+    value: number | null;
+    note: string;
+    unavailable?: boolean;
+  }[];
   confirmed: boolean;
   total?: number;
+  availableMax?: number;
 }
 export const CATEGORIES: Record<
   CategoryId,
@@ -258,7 +275,8 @@ export function redistribute(criteria: Criterion[]): Criterion[] {
 }
 export function recommendedPlan(
   category: CategoryId,
-  goal = "",
+  _goal = "",
+  emphasis: Emphasis = "balanced",
 ): AssessmentPlan {
   const criteria: Criterion[] = PROOFS.map(
     ([id, label, description, mode, weight]) => ({
@@ -282,7 +300,7 @@ export function recommendedPlan(
       locked: false,
     })),
   );
-  if (/창의|독창|새로운/.test(goal)) {
+  if (emphasis === "creativity") {
     const existing = criteria.find((c) => c.label === "창의적 발상");
     if (existing) existing.weight += 20;
     else
@@ -296,7 +314,7 @@ export function recommendedPlan(
         locked: false,
       });
   }
-  if (/신뢰|출처|근거/.test(goal))
+  if (emphasis === "evidence")
     for (const c of criteria)
       if (c.source === "content" && /근거|출처/.test(c.label)) c.weight += 15;
   if (category === "reflection") {
@@ -307,10 +325,38 @@ export function recommendedPlan(
   return {
     version: 1,
     category,
+    gradeBand: "middle",
+    emphasis,
     purpose: "assignment",
     grading: "score",
     criteria: redistribute(criteria).map((c) => ({ ...c, locked: false })),
   };
+}
+export function recommendedRevision(plan: AssessmentPlan): AssessmentPlan {
+  const defaults = recommendedPlan(plan.category, "", plan.emphasis);
+  const criteria = plan.criteria.map((c) => {
+    const candidate = defaults.criteria.find((x) => x.id === c.id);
+    return candidate && !c.locked && c.mode === "score" && c.source !== "custom"
+      ? { ...c, weight: candidate.weight }
+      : c;
+  });
+  if (
+    plan.emphasis === "creativity" &&
+    !criteria.some((c) => c.label === "창의적 발상")
+  )
+    criteria.push(defaults.criteria.find((c) => c.id === "common:creativity")!);
+  return { ...plan, criteria: redistribute(criteria) };
+}
+export function sectionsFor(category: CategoryId, gradeBand?: GradeBand) {
+  const sections = CATEGORIES[category].sections;
+  return gradeBand === "lowerPrimary" || gradeBand === "middlePrimary"
+    ? [sections[0], sections[1], sections.at(-1)!]
+    : sections;
+}
+export function categoryGuidance(category: CategoryId) {
+  return ["reading", "creative", "reflection"].includes(category)
+    ? "초등 5학년 이상 권장 · 초등 3~4학년은 교사의 도움과 짧은 활동으로 시작하세요. 1~2학년은 입력 지원이 필요합니다."
+    : "초등 5학년 이상 권장 · 실제 실험·발표·외부 제작 능력은 교사가 직접 확인합니다.";
 }
 export const scoreCriteria = (plan: AssessmentPlan) =>
   plan.grading === "score"
@@ -344,9 +390,10 @@ export function planError(plan: AssessmentPlan): string {
   return "";
 }
 export function effortMode(plan?: AssessmentPlan): CriterionMode {
-  return plan
-    ? (plan.criteria.find((c) => c.id === "proof:effort")?.mode ?? "exclude")
-    : "score";
+  if (!plan) return "score";
+  const mode =
+    plan.criteria.find((c) => c.id === "proof:effort")?.mode ?? "exclude";
+  return plan.grading === "feedback" && mode === "score" ? "reference" : mode;
 }
 export function gradeError(
   plan: AssessmentPlan,
@@ -362,6 +409,11 @@ export function gradeError(
     return "평가 항목을 다시 확인해주세요.";
   for (const c of scored) {
     const value = evaluation.scores.find((s) => s.id === c.id);
+    if (value?.unavailable) {
+      if (value.value !== null || value.note.trim().length < 5)
+        return `${c.label}: 점수 없이 자료 부족 사유를 5자 이상 남겨주세요.`;
+      continue;
+    }
     if (
       !value ||
       value.value === null ||
@@ -376,16 +428,44 @@ export function gradeError(
     )
       return `${c.label}: 직접 확인한 근거를 남겨주세요.`;
   }
+  if (scored.length && gradeAvailableMax(plan, evaluation) === 0)
+    return "모든 항목이 자료 부족이면 평가를 확정할 수 없습니다.";
   if (!evaluation.confirmed)
     return "평가와 근거를 확인한 뒤 확정에 동의해주세요.";
   return "";
 }
-export const gradeTotal = (evaluation?: Evaluation) =>
-  evaluation?.scores.every((s) => s.value !== null)
-    ? Math.round(
-        evaluation.scores.reduce((n, s) => n + (s.value ?? 0), 0) * 100,
-      ) / 100
-    : null;
+export function gradeAvailableMax(
+  plan: AssessmentPlan,
+  evaluation: Evaluation,
+) {
+  return scoreCriteria(plan)
+    .filter((c) => !evaluation.scores.find((s) => s.id === c.id)?.unavailable)
+    .reduce((n, c) => n + c.weight, 0);
+}
+export function gradeTotal(
+  evaluation?: Evaluation,
+  plan?: AssessmentPlan,
+): number | null {
+  if (
+    !evaluation ||
+    evaluation.scores.some((s) => !s.unavailable && s.value === null)
+  )
+    return null;
+  const max = plan
+    ? gradeAvailableMax(plan, evaluation)
+    : (evaluation.availableMax ?? 100);
+  if (!max) return null;
+  return (
+    Math.round(
+      (evaluation.scores.reduce(
+        (n, s) => n + (s.unavailable ? 0 : (s.value ?? 0)),
+        0,
+      ) /
+        max) *
+        10000,
+    ) / 100
+  );
+}
 export function blankEvaluation(plan: AssessmentPlan): Evaluation {
   return {
     version: 1,
@@ -401,17 +481,19 @@ const paragraph = (text?: string) => ({
   type: "paragraph",
   ...(text ? { content: [{ type: "text", text }] } : {}),
 });
-export function templateDoc(category: CategoryId): Doc {
+export function templateDoc(category: CategoryId, gradeBand?: GradeBand): Doc {
   const t = CATEGORIES[category];
-  const content: unknown[] = t.sections.flatMap((title) => [
-    {
-      type: "heading",
-      attrs: { level: 2 },
-      content: [{ type: "text", text: title }],
-    },
-    paragraph(),
-  ]);
-  if (t.table)
+  const content: unknown[] = sectionsFor(category, gradeBand).flatMap(
+    (title) => [
+      {
+        type: "heading",
+        attrs: { level: 2 },
+        content: [{ type: "text", text: title }],
+      },
+      paragraph(),
+    ],
+  );
+  if (t.table && gradeBand !== "lowerPrimary" && gradeBand !== "middlePrimary")
     content.splice(4, 0, {
       type: "table",
       content: [

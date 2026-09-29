@@ -3,6 +3,7 @@ import { RhythmSample } from "../evidence/types";
 export interface RhythmProfile {
   sampleCount: number;
   medianFlightMs: number | null;
+  medianDwellMs?: number | null;
   p90FlightMs: number | null;
   medianBurstLength: number | null;
 }
@@ -31,6 +32,13 @@ export function buildRhythmProfile(samples: RhythmSample[]): RhythmProfile {
     .filter((x): x is number => typeof x === "number");
   return {
     sampleCount: samples.length,
+    medianDwellMs: median(
+      samples
+        .map((s) => s.dwellMs)
+        .filter(
+          (x): x is number => typeof x === "number" && x >= 0 && x < 5000,
+        ),
+    ),
     medianFlightMs: median(flights),
     p90FlightMs: percentile(flights, 0.9),
     medianBurstLength: median(bursts),
@@ -71,4 +79,31 @@ export function comparableRhythm(
     mode: selected,
     samples: selected === "composition" ? composition : direct,
   };
+}
+
+// Experimental descriptive similarity, never a probability of authorship.
+export function registeredContinuity(
+  a: RhythmProfile,
+  b: RhythmProfile,
+): number | null {
+  if (a.sampleCount < 80 || b.sampleCount < 80) return null;
+  const metrics: [keyof RhythmProfile, number, number][] = [
+    ["medianFlightMs", 0.4, 80],
+    ["p90FlightMs", 0.2, 100],
+    ["medianDwellMs", 0.25, 50],
+    ["medianBurstLength", 0.15, 5],
+  ];
+  let total = 0,
+    weights = 0,
+    count = 0;
+  for (const [key, weight, floor] of metrics) {
+    const x = a[key],
+      y = b[key];
+    if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y))
+      continue;
+    total += weight * Math.max(0, 1 - Math.abs(x - y) / Math.max(floor, x, y));
+    weights += weight;
+    count++;
+  }
+  return count >= 2 ? total / weights : null;
 }

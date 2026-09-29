@@ -105,8 +105,16 @@ export interface LearningResponse {
   updatedAt: number;
 }
 export interface Submission {
+  studentId?: string;
+  rhythmDeviceId?: string;
+  authorshipNote?: string;
+  clarification?: { text: string; updatedAt: number };
   assessment?: AssessmentPlan;
   rhythmBaseline?: {
+    registrationId?: string;
+    deviceId?: string;
+    deviceLabel?: string;
+    verifiedAt?: number;
     mode?: "direct" | "composition";
     profile: import("./my-proof/rhythm").RhythmProfile;
     submissionId: string;
@@ -135,6 +143,8 @@ export interface Submission {
   revision: number;
 }
 export interface SyncBody {
+  rhythmDeviceId?: string;
+  authorshipNote?: string;
   baseRevision: number;
   events: EvidenceEvent[];
   snapshots: WritingSnapshot[];

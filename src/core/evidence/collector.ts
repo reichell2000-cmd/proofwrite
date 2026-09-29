@@ -38,6 +38,7 @@ export class EvidenceCollector {
     at = performance.now(),
     correction = false,
     mode: "direct" | "composition" = "direct",
+    deviceId?: string,
   ) {
     if (mode !== this.mode) this.resetRhythm();
     this.mode = mode;
@@ -47,6 +48,7 @@ export class EvidenceCollector {
     this.rhythm.push({
       at: Date.now(),
       mode,
+      deviceId,
       flightMs: flight,
       burstLength: this.burst,
       pauseBeforeMs:

@@ -2,6 +2,11 @@
 import { useState } from "react";
 import {
   CATEGORIES,
+  GRADE_BANDS,
+  sectionsFor,
+  categoryGuidance,
+  recommendedRevision,
+  gradeAvailableMax,
   CATEGORY_IDS,
   COMMON_CRITERIA,
   recommendedPlan,
@@ -26,6 +31,7 @@ export function AssessmentBuilder({
   goal: string;
 }) {
   const [preview, setPreview] = useState<Criterion[] | null>(null);
+  const [rubricOpen, setRubricOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [common, setCommon] = useState<string>("creativity");
   const change = (plan: AssessmentPlan) => {
@@ -70,6 +76,8 @@ export function AssessmentBuilder({
               change({
                 ...recommendedPlan(e.target.value as CategoryId, goal),
                 purpose: value.purpose,
+                gradeBand: value.gradeBand,
+                emphasis: value.emphasis,
               })
             }
           >
@@ -81,14 +89,53 @@ export function AssessmentBuilder({
           </select>
         </label>
       </div>
+      <div className="form-grid">
+        <label>
+          대상 학년
+          <select
+            aria-label="대상 학년"
+            value={value.gradeBand || "middle"}
+            onChange={(e) =>
+              change({
+                ...value,
+                gradeBand: e.target.value as AssessmentPlan["gradeBand"],
+              })
+            }
+          >
+            {Object.entries(GRADE_BANDS).map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          중요하게 볼 기준
+          <select
+            aria-label="중요하게 볼 기준"
+            value={value.emphasis || "balanced"}
+            onChange={(e) =>
+              change({
+                ...value,
+                emphasis: e.target.value as AssessmentPlan["emphasis"],
+              })
+            }
+          >
+            <option value="balanced">유형별 균형</option>
+            <option value="creativity">창의적 발상</option>
+            <option value="evidence">근거 활용</option>
+          </select>
+        </label>
+      </div>
       <p>{CATEGORIES[value.category].goal}</p>
+      <p className="scope-note">{categoryGuidance(value.category)}</p>
       {CATEGORIES[value.category].boundary && (
         <p className="scope-note">{CATEGORIES[value.category].boundary}</p>
       )}
       <details className="template-preview">
         <summary>학생 작성 양식 미리보기</summary>
         <ol>
-          {CATEGORIES[value.category].sections.map((s) => (
+          {sectionsFor(value.category, value.gradeBand).map((s) => (
             <li key={s}>{s}</li>
           ))}
         </ol>
@@ -100,12 +147,15 @@ export function AssessmentBuilder({
       <div className="assessment-actions">
         <button
           type="button"
-          onClick={() =>
-            change({
-              ...recommendedPlan(value.category, goal),
-              purpose: value.purpose,
-            })
-          }
+          onClick={() => {
+            try {
+              setPreview(recommendedRevision(value).criteria);
+              setRubricOpen(true);
+              setMessage("");
+            } catch (e) {
+              setMessage((e as Error).message);
+            }
+          }}
         >
           유형·목표로 추천 다시 적용
         </button>
@@ -118,14 +168,6 @@ export function AssessmentBuilder({
               change({
                 ...value,
                 grading: e.target.value as AssessmentPlan["grading"],
-                criteria:
-                  e.target.value === "feedback"
-                    ? value.criteria.map((c) => ({
-                        ...c,
-                        mode: c.mode === "score" ? "reference" : c.mode,
-                        weight: 0,
-                      }))
-                    : value.criteria,
               })
             }
           >
@@ -135,11 +177,15 @@ export function AssessmentBuilder({
         </label>
       </div>
       <p className="fine-print">
-        유형별 기본 비율에 배움 목표의 창의·근거 강조를 반영하는 추천
-        양식입니다. 수정하지 않으면 아래 추천값으로 게시됩니다. 추천값은 검증된
-        자동 채점 기준이 아닙니다.
+        유형별 기본 비율에 선택한 중점을 반영하는 추천 양식입니다. 수정하지
+        않으면 아래 추천값으로 게시됩니다. 추천값은 검증된 자동 채점 기준이
+        아닙니다.
       </p>
-      <details className="rubric-settings">
+      <details
+        className="rubric-settings"
+        open={rubricOpen}
+        onToggle={(e) => setRubricOpen(e.currentTarget.open)}
+      >
         <summary>평가 항목·배점 조정</summary>
         <div className="criterion-list">
           {value.criteria.map((c) => (
@@ -192,9 +238,7 @@ export function AssessmentBuilder({
                       })
                     }
                   >
-                    {value.grading === "score" && (
-                      <option value="score">평가 포함</option>
-                    )}
+                    <option value="score">평가 포함</option>
                     <option value="reference">참고만 보기</option>
                     <option value="exclude">이번 과제에서 제외</option>
                   </select>
@@ -399,7 +443,7 @@ export function AssessmentSummary({ plan }: { plan?: AssessmentPlan }) {
             {c.source === "custom" && <small>교사가 직접 확인하는 항목</small>}
           </div>
         ))}
-      <details>
+      <details open={plan.grading === "feedback"}>
         <summary>참고하는 증거·기준</summary>
         {plan.criteria
           .filter(
@@ -436,11 +480,15 @@ export function AssignmentFormat({
     <section className="panel assignment-format">
       <h3>{category.label} 작성 안내</h3>
       <ol>
-        {category.sections.map((x) => (
+        {sectionsFor(plan.category, plan.gradeBand).map((x) => (
           <li key={x}>{x}</li>
         ))}
       </ol>
-      {category.table && <p>자료를 비교·관찰하는 표를 양식에 포함했습니다.</p>}
+      {category.table &&
+        plan.gradeBand !== "lowerPrimary" &&
+        plan.gradeBand !== "middlePrimary" && (
+          <p>자료를 비교·관찰하는 표를 양식에 포함했습니다.</p>
+        )}
       {category.boundary && <p className="scope-note">{category.boundary}</p>}
       {onInsert && (
         <button type="button" onClick={onInsert}>
@@ -490,6 +538,18 @@ export function EvaluationEditor({
               {c.label} · {c.weight}점
             </b>
             <p>{c.description}</p>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                aria-label={`${c.label} 자료 부족`}
+                disabled={disabled}
+                checked={!!row?.unavailable}
+                onChange={(e) =>
+                  set(c.id, { unavailable: e.target.checked, value: null })
+                }
+              />
+              자료 부족 · 계산에서 제외하고 사유 남기기
+            </label>
             <label>
               점수
               <input
@@ -498,7 +558,7 @@ export function EvaluationEditor({
                 min={0}
                 max={c.weight}
                 step="0.5"
-                disabled={disabled}
+                disabled={disabled || !!row?.unavailable}
                 value={row?.value ?? ""}
                 placeholder="평가 대기"
                 onChange={(e) =>
@@ -529,9 +589,9 @@ export function EvaluationEditor({
       <p role="status">
         {plan.grading === "feedback"
           ? "점수 없는 피드백"
-          : gradeTotal(v) === null
+          : gradeTotal(v, plan) === null
             ? "점수 입력을 기다리는 항목이 있습니다."
-            : `평가 합계 ${gradeTotal(v)} / 100점`}
+            : `평가 합계 ${gradeTotal(v, plan)} / 100점 (자료가 있는 ${gradeAvailableMax(plan, v)}점 만점에서 환산)`}
       </p>
       <label className="check-label">
         <input
@@ -560,15 +620,24 @@ export function EvaluationResult({
       <h3>
         선생님이 확정한 평가{" "}
         {plan.grading === "score"
-          ? `${value.total ?? gradeTotal(value)} / 100점`
+          ? `${value.total ?? gradeTotal(value, plan)} / 100점`
           : "· 피드백"}
       </h3>
+      {plan.grading === "score" && (
+        <p>
+          자료가 있는 {value.availableMax ?? gradeAvailableMax(plan, value)}점
+          만점에서 100점으로 환산합니다.
+        </p>
+      )}
       {scoreCriteria(plan).map((c) => {
         const row = value.scores.find((s) => s.id === c.id);
         return (
           <div className="rubric-item" key={c.id}>
             <b>
-              {c.label} · {row?.value ?? "평가 대기"} / {c.weight}점
+              {c.label} ·{" "}
+              {row?.unavailable
+                ? "자료 부족 · 계산 제외"
+                : `${row?.value ?? "평가 대기"} / ${c.weight}점`}
             </b>
             {row?.note && <p>{row.note}</p>}
           </div>

@@ -5,6 +5,10 @@ export const assessmentSchema = z
   .object({
     version: z.literal(1),
     category: z.enum(CATEGORY_IDS),
+    gradeBand: z
+      .enum(["lowerPrimary", "middlePrimary", "upperPrimary", "middle", "high"])
+      .optional(),
+    emphasis: z.enum(["balanced", "creativity", "evidence"]).optional(),
     purpose: z.enum(["assignment", "classroom", "practice"]),
     grading: z.enum(["score", "feedback"]),
     criteria: z
@@ -52,6 +56,7 @@ export const evaluationSchema = z
           .object({
             id: z.string().max(80),
             value: z.number().finite().min(0).max(100).nullable(),
+            unavailable: z.boolean().optional(),
             note: z.string().trim().max(2000),
           })
           .strict(),
@@ -138,10 +143,11 @@ const snapshot = z
     charCount: z.number().int().nonnegative(),
   })
   .strict();
-const rhythm = z
+export const rhythmSchema = z
   .object({
     at: z.number().finite(),
     mode: z.enum(["direct", "composition"]).optional(),
+    deviceId: z.string().uuid().optional(),
     dwellMs: z.number().finite().min(0).max(60000).optional(),
     flightMs: z.number().finite().min(0).max(86400000).optional(),
     burstLength: z.number().int().min(1).max(100000).optional(),
@@ -166,8 +172,8 @@ const effortSchema = z
               "image/jpeg",
               "image/webp",
             ]),
-            size: z.number().int().positive().max(524288),
-            data: z.string().max(700000),
+            size: z.number().int().positive().max(2097152),
+            data: z.string().max(2800000),
           })
           .strict(),
       )
@@ -179,8 +185,10 @@ export const syncSchema = z
     baseRevision: z.number().int().nonnegative(),
     events: z.array(event).max(3000),
     snapshots: z.array(snapshot).max(100),
-    rhythm: z.array(rhythm).max(10000),
+    rhythm: z.array(rhythmSchema).max(10000),
     rhythmOptIn: z.boolean(),
+    rhythmDeviceId: z.string().uuid().optional(),
+    authorshipNote: z.string().max(2000).optional(),
     title: z.string().trim().max(160),
     sources: z.string().max(6000),
     effort: effortSchema.optional(),
@@ -232,7 +240,7 @@ export const reviewSchema = z
   .strict();
 export async function body(req: Request) {
   const text = await req.text();
-  if (text.length > 6_000_000)
+  if (text.length > 20_000_000)
     throw new HttpError(413, "한 번에 저장할 수 있는 크기를 초과했습니다.");
   try {
     return JSON.parse(text);

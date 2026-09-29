@@ -71,7 +71,9 @@ export function mergeSubmission(
       JSON.stringify(request.pick) === JSON.stringify(current.pick) &&
       JSON.stringify(request.reflections) ===
         JSON.stringify(current.reflections) &&
-      request.rhythmOptIn === current.rhythmOptIn
+      request.rhythmOptIn === current.rhythmOptIn &&
+      request.rhythmDeviceId === current.rhythmDeviceId &&
+      request.authorshipNote === current.authorshipNote
     )
       return current;
     throw new HttpError(
@@ -170,7 +172,7 @@ export function mergeSubmission(
             ? bytes.subarray(0, 3).toString("hex") === "ffd8ff"
             : bytes.subarray(0, 4).toString() === "RIFF" &&
               bytes.subarray(8, 12).toString() === "WEBP";
-    if (bytes.length !== file.size || bytes.length > 524288 || !signature)
+    if (bytes.length !== file.size || bytes.length > 2097152 || !signature)
       throw new HttpError(400, "첨부자료의 종류나 크기가 맞지 않습니다.");
   }
   if (
@@ -191,6 +193,8 @@ export function mergeSubmission(
       ? [...current.rhythm, ...request.rhythm].slice(-10000)
       : [],
     rhythmOptIn: request.rhythmOptIn,
+    rhythmDeviceId: request.rhythmDeviceId ?? current.rhythmDeviceId,
+    authorshipNote: request.authorshipNote ?? current.authorshipNote,
     title: request.title,
     sources: request.sources,
     effort,
@@ -202,7 +206,7 @@ export function mergeSubmission(
     updatedAt: Date.now(),
     revision: current.revision + 1,
   };
-  if (JSON.stringify(next).length > 24_000_000)
+  if (JSON.stringify(next).length > 32_000_000)
     throw new HttpError(413, "문서 저장 용량 한도에 도달했습니다.");
   return next;
 }

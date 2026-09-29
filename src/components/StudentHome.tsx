@@ -45,6 +45,16 @@ export default function StudentHome() {
             </p>
           </div>
         </div>
+        <section className="panel">
+          <h2>나의 타자 기준과 학생 연결</h2>
+          <p>
+            다른 기기에서 과제를 이어가고 내 입력 습관의 기준을 등록할 수
+            있어요.
+          </p>
+          <Link className="button outline" href="/student/identity">
+            학생 연결·타자 기준 관리
+          </Link>
+        </section>
         <nav className="tabs" aria-label="학생 공간">
           {[
             ["tasks", "내 과제"],
@@ -73,7 +83,8 @@ export default function StudentHome() {
                   : "선생님의 과제 참여 링크를 열어주세요."}
             </h2>
             <p>
-              같은 브라우저에서 참여한 과제를 이곳에서 다시 확인할 수 있어요.
+              기존 참여 브라우저 또는 학생 연결 코드로 과제를 다시 확인할 수
+              있어요.
             </p>
           </section>
         )}
@@ -116,8 +127,8 @@ export default function StudentHome() {
           ))}
         </div>
         <p className="fine-print">
-          이 브라우저의 참여 권한으로 표시됩니다. 다른 기기나 권한 만료 후에는
-          기존 과제가 보이지 않을 수 있어요.
+          학생 연결을 만들면 연결 코드로 다른 기기에서 과제를 이어갈 수 있어요.
+          연결 전의 과제는 기존 참여 브라우저에서 확인해주세요.
         </p>
       </main>
     </>

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Feather } from "lucide-react";
@@ -33,6 +34,13 @@ export default function Join({
           <b>{assignment.policy}</b>
           <span>{POLICIES[assignment.policy]}</span>
         </div>
+        <p>
+          <Link
+            href={`/student/identity?returnTo=${encodeURIComponent(`/join/${assignment.id}?code=${code}`)}`}
+          >
+            기존 학생 연결·타자 기준 등록
+          </Link>
+        </p>
         <form
           onSubmit={async (e) => {
             e.preventDefault();
