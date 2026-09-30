@@ -83,25 +83,54 @@ test("identity enrollment, teacher witness, writing comparison, report and priva
     )
     .check();
   await student.getByRole("button", { name: "타자 기준 등록 시작" }).click();
-  await student
-    .getByLabel("따라 치기 입력", { exact: true })
-    .pressSequentially(TYPING_TEXT.en, { delay: 15 });
-  await student.getByRole("button", { name: "자유 입력으로 이동" }).click();
+  const typingInput = student.getByLabel("따라 치기 입력", { exact: true });
+  const registerButton = student.getByRole("button", {
+    name: "타자 기준 등록하기",
+    exact: true,
+  });
+  await expect(registerButton).toBeVisible();
+  await expect(registerButton).toBeDisabled();
+  await expect(
+    student.getByText("등록 전 · 입력만으로 저장되지 않아요."),
+  ).toBeVisible();
+  await typingInput.fill("X");
+  await expect(
+    student.getByText("1번째 글자부터 안내 문장과 달라요.", { exact: false }),
+  ).toBeVisible();
+  await expect(registerButton).toBeDisabled();
+  await typingInput.fill("");
+  await typingInput.pressSequentially(TYPING_TEXT.en, { delay: 15 });
+  await expect(registerButton).toBeEnabled();
+  await expect(
+    student.getByText("입력을 마쳤어요.", { exact: false }),
+  ).toBeVisible();
+  await expect(student.getByLabel("자유 입력", { exact: true })).toHaveCount(0);
+  const beforeSave = await (
+    await ctx.request.get(`${origin}/api/student/account`)
+  ).json();
+  expect(beforeSave.student.registrations).toHaveLength(0);
+  await student.setViewportSize({ width: 390, height: 844 });
+  await registerButton.scrollIntoViewIfNeeded();
+  await student.screenshot({
+    path: "test-results/typing-register-ready-mobile.png",
+    fullPage: true,
+  });
   const text =
     "I believed the first answer was always the best answer. After reading two examples I compared the evidence and changed my explanation. I learned to show my reasons clearly so that another person can understand my choices.";
-  await student
-    .getByLabel("자유 입력", { exact: true })
-    .pressSequentially(text, { delay: 15 });
   const saved = student.waitForResponse(
     (r) =>
       r.url().endsWith("/api/student/typing") &&
       r.request().postDataJSON()?.action === "save",
   );
-  await student
-    .getByRole("button", { name: "타자 기준 저장", exact: true })
-    .click();
+  await registerButton.click();
   const savedResponse = await saved;
   expect(savedResponse.ok()).toBe(true);
+  expect(savedResponse.request().postDataJSON().freeText).toBeUndefined();
+  expect(savedResponse.request().postDataJSON().freeSamples).toBeUndefined();
+  await expect(
+    student.getByText("타자 기준 등록 완료", { exact: true }),
+  ).toBeVisible();
+  await expect(typingInput).toHaveCount(0);
   const registration = (await savedResponse.json()).student.registrations[0];
   expect(
     (
@@ -111,7 +140,7 @@ test("identity enrollment, teacher witness, writing comparison, report and priva
       })
     ).status(),
   ).toBe(400);
-  expect(JSON.stringify(registration)).not.toContain(text);
+  expect(JSON.stringify(registration)).not.toContain(TYPING_TEXT.en);
   await student.setViewportSize({ width: 390, height: 844 });
   expect(
     await student.evaluate(
@@ -363,11 +392,9 @@ test("photo compression, separate attachments, and unavailable evidence grading"
   await page
     .getByRole("button", { name: "다섯 가지 증거", exact: true })
     .click();
-  const files = page
-    .locator("section.panel")
-    .filter({
-      has: page.getByRole("heading", { name: "과제 첨부자료", exact: true }),
-    });
+  const files = page.locator("section.panel").filter({
+    has: page.getByRole("heading", { name: "과제 첨부자료", exact: true }),
+  });
   await expect(files.getByRole("link", { name: "large.jpg" })).toBeVisible();
   await expect(page.getByText("노력 첨부자료가 없습니다.")).toBeVisible();
   const ev = blankEvaluation(plan);

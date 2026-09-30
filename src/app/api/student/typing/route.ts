@@ -19,9 +19,7 @@ const schema = z.discriminatedUnion("action", [
     deviceId: z.string().uuid(),
     deviceLabel: z.string().trim().min(1).max(60),
     copyText: z.string().max(2000),
-    freeText: z.string().max(4000),
     copySamples: z.array(rhythmSchema).min(80).max(4000),
-    freeSamples: z.array(rhythmSchema).min(80).max(4000),
   }),
   z.object({ action: z.literal("delete"), registrationId: z.string().uuid() }),
 ]);

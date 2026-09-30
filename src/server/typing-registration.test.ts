@@ -34,10 +34,7 @@ function fixture() {
     deviceId,
     deviceLabel: "keyboard",
     copyText: TYPING_TEXT.en,
-    freeText:
-      "I learned to compare evidence and write my own ideas in my own words.",
     copySamples: samples(1000),
-    freeSamples: samples(20000),
   };
   return { account, input };
 }
@@ -47,7 +44,8 @@ describe("student typing enrollment", () => {
     const r = registerTyping(account, input);
     expect(r.profile.sampleCount).toBe(100);
     expect(account.challenge).toBeUndefined();
-    expect(JSON.stringify(account)).not.toContain(input.freeText);
+    expect(r.profile).toEqual(buildRhythmProfile(input.copySamples));
+    expect(JSON.stringify(account)).not.toContain(input.copyText);
     expect(JSON.stringify(account)).not.toContain("copySamples");
     expect(() => registerTyping(account, input)).toThrow();
   });
@@ -59,15 +57,24 @@ describe("student typing enrollment", () => {
     f.input.copyText = "paste";
     expect(() => registerTyping(f.account, f.input)).toThrow();
     f = fixture();
-    f.input.freeSamples = f.input.freeSamples.slice(0, 20);
+    f.input.copySamples = f.input.copySamples.slice(0, 20);
     expect(() => registerTyping(f.account, f.input)).toThrow();
     f = fixture();
-    f.input.freeSamples[0].deviceId = randomUUID();
+    f.input.copySamples[0].deviceId = randomUUID();
     expect(() => registerTyping(f.account, f.input)).toThrow();
     f = fixture();
-    f.input.freeSamples = f.input.freeSamples.map((s) => ({
+    f.input.copySamples = f.input.copySamples.map((s, i) => ({
       ...s,
-      mode: "composition",
+      mode: i % 2 === 0 ? "composition" : "direct",
+    }));
+    expect(() => registerTyping(f.account, f.input)).toThrow();
+    f = fixture();
+    f.input.copySamples[0].at = Date.now() + 60000;
+    expect(() => registerTyping(f.account, f.input)).toThrow();
+    f = fixture();
+    f.input.copySamples = f.input.copySamples.map((s, i) => ({
+      ...s,
+      at: f.account.challenge!.at + i,
     }));
     expect(() => registerTyping(f.account, f.input)).toThrow();
   });
@@ -75,13 +82,34 @@ describe("student typing enrollment", () => {
     const { account, input } = fixture();
     account.challenge!.language = "ko";
     input.copyText = TYPING_TEXT.ko;
-    for (const samples of [input.copySamples, input.freeSamples])
-      samples.forEach((s, i) => {
-        s.mode = i % 10 === 0 ? "direct" : "composition";
-      });
+    input.copySamples.forEach((s, i) => {
+      s.mode = i % 10 === 0 ? "direct" : "composition";
+    });
     const r = registerTyping(account, input);
     expect(r.mode).toBe("composition");
     expect(r.profile.sampleCount).toBe(90);
+  });
+  it("keeps existing registrations and only replaces the matching device without teacher verification", () => {
+    const { account, input } = fixture();
+    const challenge = { ...account.challenge! };
+    const original = registerTyping(account, input);
+    original.verifiedAt = Date.now();
+    original.verifiedAssignmentId = randomUUID();
+    const otherDevice = {
+      ...original,
+      id: randomUUID(),
+      deviceId: randomUUID(),
+    };
+    account.registrations.push(otherDevice);
+    account.challenge = { ...challenge, id: randomUUID() };
+    const updated = registerTyping(account, {
+      ...input,
+      challengeId: account.challenge.id,
+    });
+    expect(account.registrations).toEqual([otherDevice, updated]);
+    expect(updated.id).not.toBe(original.id);
+    expect(updated.verifiedAt).toBeUndefined();
+    expect(updated.verifiedAssignmentId).toBeUndefined();
   });
   it("does not substitute same-task similarity for a linked student's missing registration", () => {
     const { input } = fixture();
@@ -89,7 +117,7 @@ describe("student typing enrollment", () => {
       studentId: randomUUID(),
       rhythmDeviceId: input.deviceId,
       rhythmOptIn: true,
-      rhythm: [...input.copySamples, ...input.freeSamples],
+      rhythm: input.copySamples,
     };
     expect(observeRhythm(s).continuity).toBeNull();
     const baseline = {

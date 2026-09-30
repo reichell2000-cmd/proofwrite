@@ -9,9 +9,7 @@ export interface RegistrationInput {
   deviceId: string;
   deviceLabel: string;
   copyText: string;
-  freeText: string;
   copySamples: RhythmSample[];
-  freeSamples: RhythmSample[];
 }
 export function registerTyping(
   account: StudentAccount,
@@ -23,38 +21,26 @@ export function registerTyping(
     throw new HttpError(400, "타자 등록을 다시 시작해주세요.");
   const normalize = (s: string) =>
     s.normalize("NFC").replace(/\s+/g, " ").trim();
+  if (normalize(input.copyText) !== normalize(TYPING_TEXT[c.language]))
+    throw new HttpError(400, "안내 문장과 똑같이 따라 쳤는지 확인해주세요.");
+  const copy = comparableRhythm(input.copySamples);
   if (
-    normalize(input.copyText) !== normalize(TYPING_TEXT[c.language]) ||
-    input.freeText.trim().length < 40
-  )
-    throw new HttpError(
-      400,
-      "따라 치기 문장과 자유 입력 40자 이상을 확인해주세요.",
-    );
-  const copy = comparableRhythm(input.copySamples),
-    free = comparableRhythm(input.freeSamples);
-  const all = [...input.copySamples, ...input.freeSamples];
-  if (
-    copy.mode !== free.mode ||
     copy.samples.length < 80 ||
-    free.samples.length < 80 ||
-    all.some(
+    input.copySamples.some(
       (s) => s.deviceId !== input.deviceId || s.at < c.at || s.at > now + 1000,
     ) ||
-    [input.copySamples, input.freeSamples].some(
-      (xs) => xs.at(-1)!.at - xs[0].at < 2000,
-    )
+    input.copySamples.at(-1)!.at - input.copySamples[0].at < 2000
   )
     throw new HttpError(
       400,
-      "같은 기기와 입력 방식으로 각 단계에서 유효 간격 80개 이상을 남겨주세요.",
+      "입력 습관 기록이 부족하거나 기기가 달라졌어요. 같은 키보드로 문장을 다시 따라 쳐주세요.",
     );
   const registration: TypingRegistration = {
     id: randomUUID(),
     deviceId: input.deviceId,
     deviceLabel: input.deviceLabel,
     mode: copy.mode,
-    profile: buildRhythmProfile(free.samples),
+    profile: buildRhythmProfile(copy.samples),
     copyProfile: buildRhythmProfile(copy.samples),
     registeredAt: now,
   };

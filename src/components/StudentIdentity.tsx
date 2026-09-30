@@ -6,7 +6,6 @@ import { Header, Notice, time } from "./Shell";
 import { inputDeviceId, type PublicStudent } from "../core/identity";
 import { EvidenceCollector } from "../core/evidence/collector";
 import { comparableRhythm } from "../core/my-proof/rhythm";
-import type { RhythmSample } from "../core/evidence/types";
 import { clearLocalDrafts } from "../core/storage/local";
 type AccountResult = {
   student: PublicStudent | null;
@@ -33,12 +32,14 @@ export default function StudentIdentity() {
     challengeId: string;
     text: string;
   } | null>(null);
-  const [stage, setStage] = useState<"copy" | "free">("copy"),
-    [copyText, setCopyText] = useState(""),
-    [freeText, setFreeText] = useState("");
+  const [copyText, setCopyText] = useState("");
+  const [typingMessage, setTypingMessage] = useState("");
+  const typingResult = useRef<HTMLDivElement>(null);
   const [count, setCount] = useState(0);
-  const collector = useRef<EvidenceCollector | null>(null),
-    copySamples = useRef<RhythmSample[]>([]);
+  const collector = useRef<EvidenceCollector | null>(null);
+  useEffect(() => {
+    if (typingMessage) typingResult.current?.focus();
+  }, [typingMessage]);
   useEffect(() => {
     setDevice(inputDeviceId());
     const next = new URLSearchParams(location.search).get("returnTo") || "";
@@ -76,6 +77,9 @@ export default function StudentIdentity() {
     setCode(r.code || "");
     setRecovery("");
     setChallenge(null);
+    setTypingMessage("");
+    collector.current = null;
+    setCopyText("");
     if (r.claimed !== undefined)
       setMessage(`이 브라우저의 과제 ${r.claimed}개를 연결했어요.`);
   }
@@ -95,6 +99,24 @@ export default function StudentIdentity() {
   }
   const normalized = (text: string) =>
     text.normalize("NFC").replace(/\s+/g, " ").trim();
+  const entered = normalized(copyText),
+    expected = normalized(challenge?.text || ""),
+    textMatches = !!challenge && entered === expected,
+    ready = textMatches && count >= 80;
+  const mismatch = Array.from(entered).findIndex(
+    (character, index) => character !== Array.from(expected)[index],
+  );
+  const progress = textMatches
+    ? count >= 80
+      ? "입력을 마쳤어요. 아래 ‘타자 기준 등록하기’를 눌러 등록을 완료해주세요."
+      : "문장은 완성됐지만 입력 습관 기록이 부족해요. 입력 칸을 비우고 키보드로 다시 따라 쳐주세요."
+    : mismatch >= 0
+      ? `${mismatch + 1}번째 글자부터 안내 문장과 달라요. ‘${
+          Array.from(expected)
+            .slice(mismatch, mismatch + 12)
+            .join("") || "문장 끝"
+        }’ 부분을 확인해주세요.`
+      : `안내 문장을 끝까지 따라 쳐주세요. ${Array.from(expected).length - Array.from(entered).length}자 남았어요.`;
   return (
     <>
       <Header />
@@ -105,7 +127,7 @@ export default function StudentIdentity() {
         <p className="muted">
           나의 과제를 연결하고, 평소의 입력 습관을 기준으로 등록해요.
         </p>
-        {error && <Notice error>{error}</Notice>}
+        {error && !challenge && <Notice error>{error}</Notice>}
         {message && <Notice>{message}</Notice>}
         {!loaded ? (
           <p>불러오고 있어요…</p>
@@ -271,9 +293,9 @@ export default function StudentIdentity() {
                 기준으로 보관하지 않습니다.
               </p>
               <p className="fine-print">
-                따라 치기와 자유 입력을 각각 진행합니다. 한글 조합 입력과 일반
-                입력은 따로 비교합니다. 최초 등록은 선생님이 직접 지켜본 경우
-                선생님 확인 표시를 남길 수 있습니다.
+                안내 문장을 따라 친 뒤 등록 버튼을 눌러주세요. 한글 조합 입력과
+                일반 입력은 따로 비교합니다. 최초 등록은 선생님이 직접 지켜본
+                경우 선생님 확인 표시를 남길 수 있습니다.
               </p>
               <label>
                 지금 사용하는 기기·키보드 이름
@@ -288,6 +310,7 @@ export default function StudentIdentity() {
                 disabled={busy || !!challenge}
                 onClick={() => {
                   setDevice(inputDeviceId(true));
+                  setTypingMessage("");
                   setMessage("새 키보드의 별도 기준을 등록할 수 있어요.");
                 }}
               >
@@ -295,6 +318,23 @@ export default function StudentIdentity() {
               </button>
               {!challenge ? (
                 <>
+                  {typingMessage && (
+                    <div
+                      className="notice"
+                      role="status"
+                      tabIndex={-1}
+                      ref={typingResult}
+                    >
+                      <strong>{typingMessage}</strong>
+                      <p>
+                        과제 작성 화면에서 타이핑 습관 비교에 참여하면 등록한
+                        기준을 사용합니다.
+                      </p>
+                      <Link className="button primary" href={returnTo}>
+                        과제로 돌아가기 →
+                      </Link>
+                    </div>
+                  )}
                   <label>
                     따라 치기 언어
                     <select
@@ -330,10 +370,8 @@ export default function StudentIdentity() {
                           consent: true,
                         });
                         setChallenge(c);
-                        setStage("copy");
                         setCopyText("");
-                        setFreeText("");
-                        copySamples.current = [];
+                        setTypingMessage("");
                         startCollector();
                       })
                     }
@@ -343,33 +381,23 @@ export default function StudentIdentity() {
                 </>
               ) : (
                 <>
-                  <h3>
-                    {stage === "copy"
-                      ? "1. 문장 따라 치기"
-                      : "2. 나의 생각 자유롭게 쓰기"}
-                  </h3>
-                  {stage === "copy" ? (
-                    <blockquote>{challenge.text}</blockquote>
-                  ) : (
-                    <p>
-                      오늘 있었던 일이나 관심 있는 내용을 40자 이상 적어주세요.
-                      유효 입력 간격 80개 이상이 필요합니다.
-                    </p>
-                  )}
+                  <h3>문장 따라 치기</h3>
+                  <p>
+                    <strong>등록 전 · 입력만으로 저장되지 않아요.</strong>
+                  </p>
+                  <p className="fine-print">
+                    붙여넣기 대신 키보드로 입력해주세요. 빠르게 칠 필요는
+                    없어요.
+                  </p>
+                  <blockquote>{challenge.text}</blockquote>
                   <textarea
-                    key={stage}
-                    aria-label={
-                      stage === "copy" ? "따라 치기 입력" : "자유 입력"
-                    }
+                    aria-label="따라 치기 입력"
+                    aria-describedby="typing-progress"
                     rows={7}
-                    maxLength={stage === "copy" ? 2000 : 4000}
-                    value={stage === "copy" ? copyText : freeText}
+                    maxLength={2000}
+                    value={copyText}
                     disabled={busy}
-                    onChange={(e) =>
-                      stage === "copy"
-                        ? setCopyText(e.target.value)
-                        : setFreeText(e.target.value)
-                    }
+                    onChange={(e) => setCopyText(e.target.value)}
                     onPaste={(e) => e.preventDefault()}
                     onDrop={(e) => e.preventDefault()}
                     onKeyDown={(e) => {
@@ -400,29 +428,17 @@ export default function StudentIdentity() {
                     }}
                     onBlur={() => collector.current?.resetRhythm()}
                   />
-                  <p role="status">유효 입력 간격 {count}개 / 최소 80개</p>
-                  {stage === "copy" ? (
-                    <button
-                      disabled={
-                        busy ||
-                        count < 80 ||
-                        normalized(copyText) !== normalized(challenge.text)
-                      }
-                      onClick={() => {
-                        copySamples.current =
-                          collector.current?.rhythmFeatures() || [];
-                        setStage("free");
-                        startCollector();
-                      }}
-                    >
-                      자유 입력으로 이동
-                    </button>
-                  ) : (
+                  <p id="typing-progress" role="status">
+                    {progress}
+                  </p>
+                  <p className="fine-print">
+                    입력 습관 기록 {count}개 / 등록에 필요한 최소 기록 80개
+                  </p>
+                  {error && <Notice error>{error}</Notice>}
+                  <div className="identity-actions">
                     <button
                       className="primary"
-                      disabled={
-                        busy || count < 80 || freeText.trim().length < 40
-                      }
+                      disabled={busy || !ready}
                       onClick={() =>
                         run(async () => {
                           const r = await api<AccountResult>(
@@ -433,39 +449,32 @@ export default function StudentIdentity() {
                               deviceId: device,
                               deviceLabel: label,
                               copyText,
-                              freeText,
-                              copySamples: copySamples.current,
-                              freeSamples:
+                              copySamples:
                                 collector.current?.rhythmFeatures() || [],
                             },
                           );
                           setStudent(r.student);
                           setChallenge(null);
                           collector.current = null;
-                          copySamples.current = [];
                           setCopyText("");
-                          setFreeText("");
-                          setMessage(
-                            "타자 기준을 등록했어요. 과제 작성 화면에서 타이핑 습관 비교에 참여하면 이 기준을 사용합니다.",
-                          );
+                          setTypingMessage("타자 기준 등록 완료");
                         })
                       }
                     >
-                      타자 기준 저장
+                      {busy ? "등록 중…" : "타자 기준 등록하기"}
                     </button>
-                  )}
-                  <button
-                    disabled={busy}
-                    onClick={() => {
-                      setChallenge(null);
-                      collector.current = null;
-                      copySamples.current = [];
-                      setCopyText("");
-                      setFreeText("");
-                    }}
-                  >
-                    등록 취소
-                  </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        setChallenge(null);
+                        collector.current = null;
+                        setCopyText("");
+                        setError("");
+                      }}
+                    >
+                      등록 취소
+                    </button>
+                  </div>
                 </>
               )}
               <h3>보관한 타자 기준</h3>
@@ -501,6 +510,7 @@ export default function StudentIdentity() {
                             { action: "delete", registrationId: r.id },
                           );
                           setStudent(r2.student);
+                          setTypingMessage("");
                         });
                     }}
                   >
